@@ -2,6 +2,9 @@
 Implementation and pipeline for common Boltzmann and molecular dynamics evaluation metrics and visualizations to either visualize data or get comparison metrics.
 
 
+# Metrics
+Metrics for manual use are implemented under `boltzeval.metrics`.
+
 # Building and running an evaluation pipeline
 Evaluation is performed by composing a list of modular evaluation nodes.
 
