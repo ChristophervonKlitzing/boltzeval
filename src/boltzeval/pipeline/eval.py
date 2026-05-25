@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields, asdict
+
 from typing import Any, Literal, Optional, TypeAlias
 import warnings
 import numpy as np
@@ -295,6 +296,7 @@ def run_eval(
     *,
     pipeline: list[EvaluationNode | tuple[EvaluationNode, str]] = [],
     skip_on_missing_data: bool = True,
+    skip_on_fail: bool = False,
 ) -> dict[str, ValueType]:
     if len(pipeline) == 0:
         warnings.warn("Empty evaluation pipeline -> running no evaluations")
@@ -306,7 +308,20 @@ def run_eval(
     print(f"Start evaluation with {len(eval_list)} nodes...")
     for i, (eval, prefix) in enumerate(eval_list):
         print(f"Run eval node {i} ({eval.__class__.__name__})...")
-        metrics = eval.eval(data, skip_on_missing_data=skip_on_missing_data)
+
+        try:
+            metrics = eval.eval(data, skip_on_missing_data=skip_on_missing_data)
+        except Exception as e:
+            if skip_on_fail:
+                metrics = None
+                warnings.warn(
+                    f"Evaluation Skipped: '{eval.__class__.__name__}' failed to evaluate (error msg: {e})",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            else:
+                raise e
+
         if metrics is None:
             continue
         metrics = _prefix_dict(metrics, prefix)
