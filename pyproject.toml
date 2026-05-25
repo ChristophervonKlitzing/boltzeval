@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+
+[project]
+name = "boltzeval"
+version = "0.1.0"
+description = "Package to quickly setup common MD and equilibrium Boltzmann metrics and visualizations, optionally in the form of evaluation pipelines"
+readme = "README.md"
+requires-python = ">=3.10"
+
+
+dependencies = [
+    "mdtraj",
+    "numpy<2",  # openmm constraint
+    "scipy",
+    "POT",
+    "deeptime",
+    "matplotlib",
+    "PyMuPDF",  # imported as fitz
+]
+
