@@ -18,8 +18,8 @@ class EnergyHistComparison(EvaluationNode):
     def __init__(
         self,
         include_pdf: bool = True,
-        include_pred_histogram: bool = False,
-        include_true_histogram: bool = False,
+        include_pred_histogram: bool = True,
+        include_true_histogram: bool = True,
         hist_metrics: list[HistogramMetric] | None = None,
         energy_range: tuple[float, float] | None = None,
     ):

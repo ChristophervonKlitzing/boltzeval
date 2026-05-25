@@ -68,12 +68,17 @@ wandb.log(wandb_metrics)
 
 #### PDF artifacts
 Some evaluations produce visualizations as PDF files stored in-memory as binary buffers. These can be written directly to disk:
+```python
+from boltzeval.pipeline import get_pdfs
+pdfs = get_pdfs(metrics)
+```
 
-TODO
 
 #### Histograms
 The density-counts of histograms can be exported for custom downstream analysis (e.g., visualizations):
-
-TODO
+```python
+from boltzeval.pipeline import get_histograms
+hists = get_histograms(metrics)
+```
 
 
