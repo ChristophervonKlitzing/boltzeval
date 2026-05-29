@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Protocol, TypeVar
+from typing import Protocol
 
 import numpy as np
 
@@ -23,6 +23,12 @@ class HistogramMetric(Protocol):
     @property
     def id(self) -> str:
         pass
+
+
+def _check_hists(hist_p: Histogram, hist_q: Histogram):
+    assert id(hist_p) != id(hist_q)
+    assert hist_p.get_num_bins() == hist_q.get_num_bins()
+    assert hist_p.get_support_range() == hist_q.get_support_range()
 
 
 def get_hist_fwd_kullback_leibler(hist_p: Histogram, hist_q: Histogram):
@@ -56,7 +62,7 @@ def get_hist_fwd_kullback_leibler(hist_p: Histogram, hist_q: Histogram):
     - Histograms must have identical bin structure.
     - The bin area is used to approximate the continuous integral.
     """
-    assert hist_p.get_num_bins() == hist_q.get_num_bins()
+    _check_hists(hist_p, hist_q)
 
     hist_density_p = hist_p.get_as_density()
     hist_density_q = hist_q.get_as_density()
@@ -104,7 +110,7 @@ def get_hist_total_variation(hist_p: Histogram, hist_q: Histogram):
     - Requires identical binning.
     - Uses bin area for continuous approximation.
     """
-    assert hist_p.get_num_bins() == hist_q.get_num_bins()
+    _check_hists(hist_p, hist_q)
 
     hist_density_p = hist_p.get_as_density()
     hist_density_q = hist_q.get_as_density()
@@ -153,7 +159,7 @@ def get_hist_jensen_shannon(hist_p: Histogram, hist_q: Histogram):
     - Histograms must have identical binning.
     - A small epsilon is used for numerical stability.
     """
-    assert hist_p.get_num_bins() == hist_q.get_num_bins()
+    _check_hists(hist_p, hist_q)
 
     hist_density_p = hist_p.get_as_density()
     hist_density_q = hist_q.get_as_density()

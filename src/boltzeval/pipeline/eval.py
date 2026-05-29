@@ -15,9 +15,6 @@ ValueType = float | int | PdfBuffer | Histogram | Any
 
 
 EvalField: TypeAlias = Literal[
-    "samples",
-    "sample_target_log_prob",
-    "samples_model_log_prob",
     "samples_true",
     "samples_pred",
     "true_samples_target_log_prob",
@@ -34,10 +31,6 @@ class EvalData:
     # This is used internally to provide better error messages
     _restricted_access: bool = False
     _eval_cls: Optional[str] = None
-
-    samples: Optional[np.ndarray] = None
-    samples_target_log_prob: Optional[np.ndarray] = None
-    samples_model_log_prob: Optional[np.ndarray] = None
 
     samples_true: Optional[np.ndarray] = None
     samples_pred: Optional[np.ndarray] = None
@@ -106,17 +99,6 @@ class EvalData:
                     f"Batch size mismatch for {name}: "
                     f"samples batch={samples.shape[0]}, log_probs batch={log_probs.shape[0]}"
                 )
-
-        _check_pair(
-            self.samples,
-            self.samples_target_log_prob,
-            "samples_target_log_prob",
-        )
-        _check_pair(
-            self.samples,
-            self.samples_model_log_prob,
-            "samples_model_log_prob",
-        )
 
         _check_pair(
             self.samples_true,

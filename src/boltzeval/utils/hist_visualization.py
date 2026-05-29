@@ -319,6 +319,31 @@ def visualize_histogram_1d_dual(
     return pdf_buffer
 
 
+def visualize_histogram_2d_dual(
+    true_hist: Histogram,
+    pred_hist: Histogram,
+    vis_mode: VisualizationMode = plot_as_log_density,
+    show: bool = False,
+):
+    if pred_hist.ndim != 2 or true_hist.ndim != 2:
+        raise ValueError(
+            f"Both histograms must be 2D but got {pred_hist.ndim}D and {true_hist.ndim}D"
+        )
+
+    fig, (ax0, ax1) = plt.subplots(ncols=2, figsize=(9, 4))
+    visualize_histogram_2d(true_hist, vis_mode=vis_mode, ax=ax0, title="true")
+    visualize_histogram_2d(pred_hist, vis_mode=vis_mode, ax=ax1, title="pred")
+
+    pdf_buffer = matplotlib_to_pdf_buffer(fig)
+
+    if show:
+        plt.show()
+    else:
+        plt.close()
+
+    return pdf_buffer
+
+
 if __name__ == "__main__":
     # ------------------------------------------------------------
     # 1D example

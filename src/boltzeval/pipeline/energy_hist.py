@@ -12,7 +12,7 @@ from boltzeval.utils.hist_visualization import (
 )
 
 
-class EnergyHistComparison(EvaluationNode):
+class EnergyHist(EvaluationNode):
     requirements = ["true_samples_target_log_prob", "pred_samples_target_log_prob"]
 
     def __init__(
@@ -44,10 +44,10 @@ class EnergyHistComparison(EvaluationNode):
 
         # === Optionally log true and predicted hist ===
         if self.include_true_histogram:
-            metrics["energy_hist/true"] = true_energy_hist
+            metrics["energy_hist/true_hist"] = true_energy_hist
 
         if self.include_pred_histogram:
-            metrics["energy_hist/pred"] = pred_energy_hist
+            metrics["energy_hist/pred_hist"] = pred_energy_hist
 
         # === Optionally log pdf visualization of true and predicted hist ===
         if self.include_pdf:
@@ -114,7 +114,7 @@ if __name__ == "__main__":
         pred_samples_model_log_prob=pred_samples_model_log_prob,
     )
 
-    pipeline = [EnergyHistComparison(hist_metrics=[get_hist_jensen_shannon])]
+    pipeline = [EnergyHist(hist_metrics=[get_hist_jensen_shannon])]
 
     # -------------------------
     # Run evaluation
