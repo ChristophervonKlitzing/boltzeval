@@ -12,7 +12,7 @@ from boltzeval.utils.hist_visualization import (
 from boltzeval.metrics.hist_comparison import HistogramMetric
 
 
-class TicaPlot(EvaluationNode):
+class TicaPlotEval(EvaluationNode):
     requirements = ["samples_true", "samples_pred"]
 
     def __init__(

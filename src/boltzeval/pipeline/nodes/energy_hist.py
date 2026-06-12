@@ -12,7 +12,7 @@ from boltzeval.utils.hist_visualization import (
 )
 
 
-class EnergyHist(EvaluationNode):
+class EnergyHistEval(EvaluationNode):
     requirements = ["true_samples_target_log_prob", "pred_samples_target_log_prob"]
 
     def __init__(

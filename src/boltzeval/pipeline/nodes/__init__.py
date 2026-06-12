@@ -1,2 +1,2 @@
-from .energy_hist import EnergyHist
-from .tica_plot import TicaPlot
+from .energy_hist import EnergyHistEval
+from .tica_plot import TicaPlotEval
