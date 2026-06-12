@@ -203,6 +203,7 @@ cython_debug/
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
 *.code-workspace
+.vscode
 
 # Ruff stuff:
 .ruff_cache/
