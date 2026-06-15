@@ -27,8 +27,10 @@ def plot_2d(
     ys = np.linspace(ylim[0], ylim[1], resolution)
     XX, YY = np.meshgrid(xs, ys)
 
-    grid = np.stack([XX, YY], axis=-1)
+    grid = np.stack([XX.ravel(), YY.ravel()], axis=1)
+
     ZZ = log_prob_fn(grid)
+    ZZ = ZZ.reshape(resolution, resolution)
 
     if log_prob_range is not None:
         vmin, vmax = log_prob_range
