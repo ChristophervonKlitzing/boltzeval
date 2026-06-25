@@ -61,6 +61,11 @@ class PhiPsiTorsionFeatureTransform(FeatureTransform):
         return features
 
 
+class IdentityFeatureTransform(FeatureTransform):
+    def __call__(self, samples):
+        return samples
+
+
 """
 def create_C_alpha_distance_feature_transform(
     topology: md.Topology,

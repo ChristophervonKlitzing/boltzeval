@@ -7,7 +7,7 @@ from boltzeval.utils.histogram import Histogram
 
 
 def fit_tica(
-    trajectories: list[np.ndarray],
+    trajectories: list[np.ndarray] | np.ndarray,
     lag: int,
     feature_transform: FeatureTransform,
     dim: int | None = 2,
@@ -15,6 +15,8 @@ def fit_tica(
 ):
     """
     Fits a TICA model from a list of trajectories, a lag time and a feature transform.
+    trajectories must be either a list of arrays each of shape (#frames, dim)
+    or one array of shape (#trajectories, #frames, dim)
     """
     featurized_trajs = np.stack([feature_transform(t) for t in trajectories])
     tica = dt.decomposition.TICA(dim=dim, lagtime=lag)

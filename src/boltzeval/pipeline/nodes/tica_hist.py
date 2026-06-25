@@ -10,6 +10,8 @@ from boltzeval.utils.hist_visualization import (
 )
 
 from boltzeval.metrics.hist_comparison import HistogramMetric
+from boltzeval.utils.histogram import Histogram
+import numpy as np
 
 
 class TicaHistEval(EvaluationNode):
@@ -91,7 +93,6 @@ class TicaHistEval(EvaluationNode):
 
 # vvvvvvvv Small demo for testing vvvvvvvv
 if __name__ == "__main__":
-    import numpy as np
     from boltzeval.metrics.tica import fit_tica
     from boltzeval.pipeline import EvalData
     from boltzeval.utils.hist_visualization import (
@@ -99,7 +100,7 @@ if __name__ == "__main__":
     )
     from boltzeval.metrics.hist_comparison import get_hist_jensen_shannon
     from boltzeval.utils.hist_visualization import plot_as_free_energy
-    from boltzeval.utils.histogram import Histogram
+
     from boltzeval.utils.pdf import plot_pdf
 
     np.random.seed(0)
@@ -153,7 +154,7 @@ if __name__ == "__main__":
         dim=2,
     )
 
-    eval_node = TicaPlot(
+    eval_node = TicaHistEval(
         tica_model, feature_transform, hist_metrics=[get_hist_jensen_shannon]
     )
 
