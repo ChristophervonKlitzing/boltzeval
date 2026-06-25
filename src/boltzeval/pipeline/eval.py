@@ -11,8 +11,11 @@ from boltzeval.utils.histogram import Histogram
 from boltzeval.utils.pdf import PdfBuffer, pdf_to_wandb_image
 from boltzeval.utils.shape_utils import squeeze_last_dim
 
-ValueType = float | int | PdfBuffer | Histogram | Any
+import logging
 
+logger = logging.getLogger(__name__)
+
+ValueType = float | int | PdfBuffer | Histogram | Any
 
 EvalField: TypeAlias = Literal[
     "samples_true",
@@ -21,12 +24,72 @@ EvalField: TypeAlias = Literal[
     "pred_samples_target_log_prob",
     "true_samples_model_log_prob",
     "pred_samples_model_log_prob",
+    "trajs_true",
+    "trajs_pred",
 ]
 
 
 @dataclass
 class EvalData:
-    """Container for all possible evaluation inputs."""
+    """
+    Container for evaluation inputs.
+
+    Shape conventions
+    -----------------
+    Samples:
+        (B, D)
+
+        where B = number of samples (true and pred may differ),
+              D = feature dimension (must be identical across all sample fields).
+
+        Molecular/coordinate samples of shape (B, n_atoms, 3)
+        are automatically flattened to (B, n_atoms * 3).
+
+    Log-probabilities:
+        (B,)
+
+        Inputs of shape (B, 1) are automatically squeezed to (B,).
+
+        Each log-prob array must match the batch size of its corresponding samples.
+
+    Trajectories:
+        (T, B, D)
+
+        where T = number of trajectories,
+              B = number of frames per trajectory,
+              D = feature dimension (must match sample dimension).
+
+    Attributes
+    ----------
+    samples_true : np.ndarray, optional
+        Shape (B_true, D). Samples from the reference/true distribution.
+
+    samples_pred : np.ndarray, optional
+        Shape (B_pred, D). Predicted/generated samples (e.g., from a model).
+
+    true_samples_target_log_prob : np.ndarray, optional
+        Shape (B_true,). log p_target(x_true).
+
+    pred_samples_target_log_prob : np.ndarray, optional
+        Shape (B_pred,). log p_target(x_pred).
+
+    true_samples_model_log_prob : np.ndarray, optional
+        Shape (B_true,). log p_model(x_true).
+
+    pred_samples_model_log_prob : np.ndarray, optional
+        Shape (B_pred,). log p_model(x_pred).
+
+    trajs_true : np.ndarray | None
+        Shape (T_true, B_true, D). Reference trajectories.
+
+    trajs_pred : np.ndarray | None
+        Shape (T_pred, B_pred, D). Predicted trajectories.
+        Predicted trajectories for trajectory-based evaluations.
+
+    Notes
+    -----
+    - Log-probability arrays must match the corresponding sample batch size.
+    """
 
     # This is used internally to provide better error messages
     _restricted_access: bool = False
@@ -40,6 +103,9 @@ class EvalData:
     true_samples_model_log_prob: Optional[np.ndarray] = None
     pred_samples_model_log_prob: Optional[np.ndarray] = None
 
+    trajs_true: Optional[np.ndarray] = None
+    trajs_pred: Optional[np.ndarray] = None
+
     def fits_requirements(self, requirements: list[EvalField]) -> bool:
         return len(self.get_missing_requirements(requirements)) == 0
 
@@ -51,15 +117,21 @@ class EvalData:
     def __post_init__(self):
         populated_fields = self._get_populated_fields()
 
-        # Flatten molecular samples of shape (batch, #atoms, 3)
-        for k, v in populated_fields.items():
-            if len(v.shape) == 3:
-                setattr(self, k, v.reshape((v.shape[0], -1)))
-
         # Remove potential single trailing ones in the fields
         for k, v in populated_fields.items():
             if "log_prob" in k:
                 setattr(self, k, squeeze_last_dim(v))
+
+        # Flatten molecular samples of shape (B, n_atoms, 3)
+        for k, v in populated_fields.items():
+            if k in ["samples_true", "samples_pred"] and v.ndim == 3:
+                setattr(self, k, v.reshape((v.shape[0], -1)))
+
+        # Flatten trajectories if they contain atomic coordinates:
+        # (T, B, n_atoms, 3) -> (T, B, n_atoms * 3)
+        for k, v in populated_fields.items():
+            if k in ["trajs_true", "trajs_pred"] and v.ndim == 4:
+                setattr(self, k, v.reshape(v.shape[0], v.shape[1], -1))
 
         # Fetch potentially updated fields
         populated_fields = self._get_populated_fields()
@@ -124,7 +196,9 @@ class EvalData:
 
     def _check_sample_shapes(self, populated_fields: dict[str, np.ndarray]):
         sample_shapes = {
-            k: v.shape for k, v in populated_fields.items() if "log_prob" not in k
+            k: v.shape
+            for k, v in populated_fields.items()
+            if k in ["samples_true", "samples_pred"]
         }
         if not all([len(shape) == 2 for shape in sample_shapes.values()]):
             invalid = {k: s for k, s in sample_shapes.items() if len(s) != 2}
@@ -281,15 +355,15 @@ def run_eval(
     skip_on_fail: bool = False,
 ) -> dict[str, ValueType]:
     if len(pipeline) == 0:
-        warnings.warn("Empty evaluation pipeline -> running no evaluations")
+        logger.warning("Empty evaluation pipeline -> running no evaluations")
 
     eval_list = _to_list(pipeline)
 
     all_metrics = {}
 
-    print(f"Start evaluation with {len(eval_list)} nodes...")
+    logger.info(f"Start evaluation with {len(eval_list)} nodes...")
     for i, (eval, prefix) in enumerate(eval_list):
-        print(f"Run eval node {i} ({eval.__class__.__name__})...")
+        logger.info(f"Run eval node {i} ({eval.__class__.__name__})...")
 
         try:
             metrics = eval.eval(data, skip_on_missing_data=skip_on_missing_data)
@@ -309,7 +383,9 @@ def run_eval(
         metrics = _prefix_dict(metrics, prefix)
 
         update_dict_with_id(all_metrics, metrics, i)
-    print(f"Finished evaluation.")
+
+    logger.info(f"Finished evaluation.")
+
     return all_metrics
 
 

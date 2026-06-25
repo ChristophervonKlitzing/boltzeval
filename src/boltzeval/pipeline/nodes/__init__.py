@@ -1,4 +1,4 @@
 from .energy_hist import EnergyHistEval
-from .tica_plot import TicaPlotEval
+from .tica_hist import TicaHistEval
 from .coord_marginal import CoordinateMarginalEval
 from .sample_plot import SamplePlot2DEval

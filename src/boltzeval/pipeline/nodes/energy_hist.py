@@ -112,9 +112,10 @@ if __name__ == "__main__":
         pred_samples_target_log_prob=pred_samples_target_log_prob,
         true_samples_model_log_prob=true_samples_model_log_prob,
         pred_samples_model_log_prob=pred_samples_model_log_prob,
+        trajs_true=np.expand_dims(samples_true, 0),
     )
 
-    pipeline = [EnergyHist(hist_metrics=[get_hist_jensen_shannon])]
+    pipeline = [EnergyHistEval(hist_metrics=[get_hist_jensen_shannon])]
 
     # -------------------------
     # Run evaluation
