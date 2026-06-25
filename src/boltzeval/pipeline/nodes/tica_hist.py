@@ -75,7 +75,7 @@ class TicaHistEval(EvaluationNode):
             pdf = visualize_histogram_2d_dual(
                 true_hist=true_hist, pred_hist=pred_hist, vis_mode=self._vis_mode
             )
-            metrics[f"tica/vis"] = pdf
+            metrics[f"tica/pdf"] = pdf
 
         # Compute histogram metrics
         for hist_metric in self._hist_metrics:
