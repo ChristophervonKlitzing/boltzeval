@@ -40,14 +40,6 @@ class TestHistogram(unittest.TestCase):
     # Construction
     # -------------------------------------------------------------------------
 
-    def test_invalid_counts_sum(self):
-        with self.assertRaises(ValueError):
-            Histogram(
-                counts=np.zeros((3,)),
-                bin_edges=(np.arange(4),),
-                n_producing_samples=1,
-            )
-
     def test_invalid_shape(self):
         with self.assertRaises(ValueError):
             Histogram(

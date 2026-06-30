@@ -1,4 +1,5 @@
 from typing import Any
+import warnings
 import numpy as np
 
 
@@ -62,6 +63,7 @@ class Histogram:
                 raise ValueError(f"bin_edges[{axis}] are not uniformly spaced")
 
         if counts.sum() == 0.0:
+            warnings.warn("Histogram object is all-zero in the specified support range")
             self._normalized_counts = counts
         else:
             self._normalized_counts: np.ndarray = counts / counts.sum()
