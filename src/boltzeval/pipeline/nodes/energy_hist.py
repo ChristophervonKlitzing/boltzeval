@@ -22,6 +22,7 @@ class EnergyHistEval(EvaluationNode):
         include_true_histogram: bool = True,
         hist_metrics: list[HistogramMetric] | None = None,
         energy_range: tuple[float, float] | None = None,
+        ignore_pred_range: bool = False,
     ):
         super().__init__()
         self.include_pdf = include_pdf
@@ -29,17 +30,24 @@ class EnergyHistEval(EvaluationNode):
         self.include_true_histogram = include_true_histogram
         self.hist_metrics = hist_metrics if hist_metrics is not None else []
         self.energy_range = energy_range
+        self.ignore_pred_range = ignore_pred_range
 
     def _eval(self, data):
         metrics = {}
 
         if self.energy_range is None:
             true_range = determine_energy_hist_range(data.true_samples_target_log_prob)
-            pred_range = determine_energy_hist_range(data.pred_samples_target_log_prob)
-            energy_range = (
-                min(true_range[0], pred_range[0]),
-                max(true_range[1], pred_range[1]),
-            )
+
+            if self.ignore_pred_range:
+                energy_range = true_range
+            else:
+                pred_range = determine_energy_hist_range(
+                    data.pred_samples_target_log_prob
+                )
+                energy_range = (
+                    min(true_range[0], pred_range[0]),
+                    max(true_range[1], pred_range[1]),
+                )
         else:
             energy_range = self.energy_range
 

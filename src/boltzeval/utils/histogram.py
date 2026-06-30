@@ -41,8 +41,8 @@ class Histogram:
             # 1D for convenience
             bin_edges = (bin_edges,)
 
-        if counts.sum() <= 0:
-            raise ValueError("counts must sum to a positive value")
+        if not (counts >= 0.0).all():
+            raise ValueError("counts must be greater or equal to zero")
 
         if counts.ndim != len(bin_edges):
             raise ValueError("counts.ndim must equal len(bin_edges)")
@@ -61,7 +61,10 @@ class Histogram:
             if not np.allclose(widths, widths[0]):
                 raise ValueError(f"bin_edges[{axis}] are not uniformly spaced")
 
-        self._normalized_counts: np.ndarray = counts / counts.sum()
+        if counts.sum() == 0.0:
+            self._normalized_counts = counts
+        else:
+            self._normalized_counts: np.ndarray = counts / counts.sum()
 
         self._bin_edges = tuple(np.asarray(edges, dtype=float) for edges in bin_edges)
 
@@ -149,7 +152,10 @@ class Histogram:
             All values sum to 1.
         """
         counts = self._normalized_counts
-        return counts / counts.sum()
+        return counts
+
+    def has_zero_mass(self) -> bool:
+        return self._normalized_counts.sum() == 0.0
 
     def get_approximate_absolute_counts(
         self,
