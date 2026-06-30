@@ -96,6 +96,7 @@ def plot_pdf(
     ax=None,
     show: bool = False,
     title: str | None = None,
+    fontsize=16,
 ):
     """
     This function is mainly for debugging purposes
@@ -118,7 +119,7 @@ def plot_pdf(
     fig.tight_layout()
 
     if title is not None:
-        ax.set_title(title)
+        ax.set_title(title, fontsize=fontsize)
 
     if show:
         plt.show()
