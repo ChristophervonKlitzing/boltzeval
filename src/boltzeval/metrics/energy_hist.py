@@ -66,16 +66,9 @@ def get_energy_hist(
     # Determine histogram range
     if energy_range is None:
         if quantile_range is not None:
-            q_low, q_high = quantile_range
-            energy_range_mutable = [
-                np.quantile(reduced_energy, q_low),
-                np.quantile(reduced_energy, q_high),
-            ]
-            width = energy_range_mutable[1] - energy_range_mutable[0]
-            energy_range_mutable[0] = energy_range_mutable[0] - width * margin_ratio
-            energy_range_mutable[1] = energy_range_mutable[1] + width * margin_ratio
-
-            energy_range = tuple(energy_range_mutable)
+            energy_range = determine_energy_hist_range(
+                log_probs, quantile_range=quantile_range, margin_ratio=margin_ratio
+            )
         else:
             energy_range = (reduced_energy.min(), reduced_energy.max())
 
@@ -84,3 +77,43 @@ def get_energy_hist(
         bins=n_bins,
         data_range=energy_range,
     )
+
+
+def determine_energy_hist_range(
+    log_probs: np.ndarray,
+    quantile_range: tuple[float, float] = (0.01, 0.99),
+    margin_ratio: float = 0.5,
+):
+    """
+    Determine a histogram energy range from reduced-energy quantiles.
+
+    Parameters
+    ----------
+    log_probs : np.ndarray
+        Array of log-probabilities log p(x).
+
+    quantile_range : tuple[float, float], default=(0.01, 0.99)
+        Lower and upper quantiles used to define the initial range.
+
+    margin_ratio : float, default=0.5
+        Fraction of the quantile width added as padding to both ends.
+
+    Returns
+    -------
+    tuple[float, float]
+        Recommended histogram range for reduced energies.
+    """
+
+    reduced_energy = -log_probs.flatten()
+
+    q_low, q_high = quantile_range
+    energy_range_mutable = [
+        np.quantile(reduced_energy, q_low),
+        np.quantile(reduced_energy, q_high),
+    ]
+    width = energy_range_mutable[1] - energy_range_mutable[0]
+    energy_range_mutable[0] = energy_range_mutable[0] - width * margin_ratio
+    energy_range_mutable[1] = energy_range_mutable[1] + width * margin_ratio
+
+    energy_range = tuple(energy_range_mutable)
+    return energy_range

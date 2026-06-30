@@ -1,6 +1,6 @@
 from matplotlib import pyplot as plt
 import numpy as np
-from boltzeval.metrics.energy_hist import get_energy_hist
+from boltzeval.metrics.energy_hist import get_energy_hist, determine_energy_hist_range
 from boltzeval.metrics.hist_comparison import (
     HistogramMetric,
     get_hist_jensen_shannon,
@@ -33,11 +33,20 @@ class EnergyHistEval(EvaluationNode):
     def _eval(self, data):
         metrics = {}
 
+        if self.energy_range is None:
+            true_range = determine_energy_hist_range(data.true_samples_target_log_prob)
+            pred_range = determine_energy_hist_range(data.pred_samples_target_log_prob)
+            energy_range = (
+                min(true_range[0], pred_range[0]),
+                max(true_range[1], pred_range[1]),
+            )
+        else:
+            energy_range = self.energy_range
+
         # === Get true and predicted energy histogram ===
         true_energy_hist = get_energy_hist(
-            data.true_samples_target_log_prob, energy_range=self.energy_range
+            data.true_samples_target_log_prob, energy_range=energy_range
         )
-        energy_range = true_energy_hist.get_support_range()[0]
         pred_energy_hist = get_energy_hist(
             data.pred_samples_target_log_prob, energy_range=energy_range
         )
