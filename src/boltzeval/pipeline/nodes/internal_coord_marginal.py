@@ -15,6 +15,7 @@ from boltzeval.metrics.torsion_marginals import (
 from boltzeval.pipeline.eval import EvaluationNode
 from boltzeval.utils.hist_visualization import VisualizationMode, plot_as_log_density
 from boltzeval.utils.histogram import Histogram
+from boltzeval.utils.shape_utils import reshape_to_molecular
 
 
 class TorsionMarginalEval(EvaluationNode):
@@ -42,17 +43,13 @@ class TorsionMarginalEval(EvaluationNode):
         self.histogram_metrics = histogram_metrics
 
     def _eval(self, data):
-        samples_true = self._reshape(data.samples_true)
-        samples_pred = self._reshape(data.samples_pred)
+        samples_true = reshape_to_molecular(data.samples_true)
+        samples_pred = reshape_to_molecular(data.samples_pred)
 
         torsion_metrics = self._get_torsion_marginal_metrics(
             samples_true=samples_true, samples_pred=samples_pred
         )
         return torsion_metrics
-
-    @staticmethod
-    def _reshape(obj: np.ndarray):
-        return obj.reshape(obj.shape[0], -1, 3)
 
     def _get_torsion_marginal_metrics(
         self, samples_true: np.ndarray, samples_pred: np.ndarray

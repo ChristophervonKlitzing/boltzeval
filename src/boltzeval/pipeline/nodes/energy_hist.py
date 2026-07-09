@@ -36,7 +36,14 @@ class EnergyHistEval(EvaluationNode):
         metrics = {}
 
         if self.energy_range is None:
-            true_range = determine_energy_hist_range(data.true_samples_target_log_prob)
+            if data.true_samples_target_log_prob.shape[0] > 0:
+                true_range = determine_energy_hist_range(
+                    data.true_samples_target_log_prob
+                )
+            else:
+                true_range = determine_energy_hist_range(
+                    data.pred_samples_target_log_prob
+                )
 
             if self.ignore_pred_range:
                 energy_range = true_range

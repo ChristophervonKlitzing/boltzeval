@@ -11,14 +11,16 @@ from boltzeval.utils.hist_visualization import (
 from boltzeval.utils.histogram import Histogram
 from boltzeval.utils.pdf import matplotlib_to_pdf_buffer
 
+from boltzeval.utils.shape_utils import reshape_to_molecular
+
 
 def get_trajectory(samples: np.ndarray, topology: md.Topology):
     """
     Get trajectory from samples and topology together with potential reshaping.
     samples can be given as (batch, #atoms, 3) or (batch, #atoms * 3).
     """
-    batch = samples.shape[0]
-    samples = samples.reshape(batch, -1, 3)
+
+    samples = reshape_to_molecular(samples)
     assert topology.n_atoms == samples.shape[1]
 
     traj_samples = md.Trajectory(samples, topology=topology)
