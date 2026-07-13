@@ -77,16 +77,29 @@ class CoordinateMarginalEval(EvaluationNode):
         dim = samples_true.shape[1]
 
         for marginal_coords in self._get_marginals(dim):
-            hist_true = Histogram.from_samples(
-                samples_true[:, marginal_coords], bins=self._n_bins
-            )
-            true_range = hist_true.get_support_range()
+            data_range = None
 
-            hist_pred = Histogram.from_samples(
-                samples_pred[:, marginal_coords],
-                bins=self._n_bins,
-                data_range=true_range,
-            )
+            if samples_true.shape[0] > 0:
+                hist_true = Histogram.from_samples(
+                    samples_true[:, marginal_coords], bins=self._n_bins
+                )
+                data_range = hist_true.get_support_range()
+                hist_pred = Histogram.from_samples(
+                    samples_pred[:, marginal_coords],
+                    bins=self._n_bins,
+                    data_range=data_range,
+                )
+            else:
+                hist_pred = Histogram.from_samples(
+                    samples_pred[:, marginal_coords],
+                    bins=self._n_bins,
+                )
+                data_range = hist_pred.get_support_range()
+                hist_true = Histogram.from_samples(
+                    samples_true[:, marginal_coords],
+                    bins=self._n_bins,
+                    data_range=data_range,
+                )
 
             metrics.update(
                 self._log_histograms(
@@ -112,7 +125,7 @@ class CoordinateMarginalEval(EvaluationNode):
                 )
             )
 
-            return metrics
+        return metrics
 
     def _log_histograms(
         self,
