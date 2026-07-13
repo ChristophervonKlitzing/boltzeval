@@ -258,7 +258,10 @@ def eval_histogram_metrics(
             m_i = metric(true_hist, pred_hist)
 
             if include_individual:
-                metrics[f"{group}/{_type}{metric.id}_{i}"] = m_i
+                key = f"{group}/{_type}{metric.id}"
+                if len(true) > 1:
+                    key += f"_{i}"
+                metrics[key] = m_i
             summed_metrics[metric.id].append(m_i)
 
     if include_aggregated:
