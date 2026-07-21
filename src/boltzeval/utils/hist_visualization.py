@@ -1,4 +1,5 @@
 from itertools import chain
+import math
 from typing import Protocol
 
 from matplotlib import pyplot as plt
@@ -333,6 +334,64 @@ def visualize_histogram_2d_dual(
     fig, (ax0, ax1) = plt.subplots(ncols=2, figsize=(9, 4))
     visualize_histogram_2d(true_hist, vis_mode=vis_mode, ax=ax0, title="true")
     visualize_histogram_2d(pred_hist, vis_mode=vis_mode, ax=ax1, title="pred")
+
+    pdf_buffer = matplotlib_to_pdf_buffer(fig)
+
+    if show:
+        plt.show()
+    else:
+        plt.close()
+
+    return pdf_buffer
+
+
+def visualize_histogram_2d_balanced_grid(
+    hists: list[Histogram],
+    titles: list[str] | None = None,
+    vis_mode: VisualizationMode = plot_as_log_density,
+    ncols: int | None = None,
+    subplot_size: tuple[float, float] = (4, 4),
+    show: bool = False,
+):
+    if len(hists) == 0:
+        raise ValueError("Must provide at least one histogram")
+
+    for i, h in enumerate(hists):
+        if h.ndim != 2:
+            raise ValueError(
+                f"All histograms must be 2D but got {h.ndim}D at index {i}"
+            )
+
+    if titles is not None and len(titles) != len(hists):
+        raise ValueError(
+            f"Number of titles ({len(titles)}) must match number of histograms ({len(hists)})"
+        )
+
+    n = len(hists)
+
+    # Compute a balanced grid: as close to square as possible, favoring
+    # slightly wider than tall.
+    if ncols is None:
+        ncols = math.ceil(math.sqrt(n))
+    nrows = math.ceil(n / ncols)
+
+    fig, axes = plt.subplots(
+        nrows=nrows,
+        ncols=ncols,
+        figsize=(subplot_size[0] * ncols, subplot_size[1] * nrows),
+        squeeze=False,
+    )
+    axes_flat = axes.flatten()
+
+    for i, hist in enumerate(hists):
+        title = titles[i] if titles is not None else None
+        visualize_histogram_2d(hist, vis_mode=vis_mode, ax=axes_flat[i], title=title)
+
+    # Hide any unused axes in the grid
+    for ax in axes_flat[n:]:
+        ax.axis("off")
+
+    fig.tight_layout()
 
     pdf_buffer = matplotlib_to_pdf_buffer(fig)
 
