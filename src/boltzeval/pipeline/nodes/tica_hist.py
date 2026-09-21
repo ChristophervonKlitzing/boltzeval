@@ -112,7 +112,7 @@ class TicaHistNodeSingle(EvaluationNode):
         tica: Transformer,
         feature_transform: FeatureTransform,
         include_pdf: bool = True,
-        include_histogram: bool = False,
+        include_histogram: bool = True,
         include_projections: bool = False,
         vis_mode: VisualizationMode = plot_as_free_energy,
         bins=100,

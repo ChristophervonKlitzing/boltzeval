@@ -225,7 +225,7 @@ class CoordinateMarginalNodeSingle(EvaluationNode):
         sample_transform: Callable[[np.ndarray], np.ndarray] = lambda x: x,
         transform_label: str = "",
         marginals: list[tuple[int, ...]] | None = None,
-        include_histograms: bool = False,
+        include_histograms: bool = True,
         include_pdfs: bool = True,
         vis_mode: VisualizationMode = plot_as_log_density,
     ):

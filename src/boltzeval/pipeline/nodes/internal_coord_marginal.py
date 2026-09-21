@@ -148,7 +148,7 @@ class TorsionMarginalNodeSingle(EvaluationNode):
         topology: md.Topology,
         vis_mode: VisualizationMode = plot_as_log_density,
         include_pdf: bool = True,
-        include_histograms: bool = False,
+        include_histograms: bool = True,
         include_free_energy_difference: bool = False,
     ):
         """

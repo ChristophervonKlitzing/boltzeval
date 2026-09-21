@@ -116,7 +116,7 @@ class EnergyHistNodeSingle(EvaluationNode):
     def __init__(
         self,
         include_pdf: bool = True,
-        include_histogram: bool = False,
+        include_histogram: bool = True,
         energy_range: tuple[float, float] | None = None,
     ):
         """
