@@ -176,6 +176,7 @@ class ImpliedTimescaleNode(EvaluationNode):
         include_pdf: bool = True,
         log_scale: bool = True,
         annotate_timescales: bool = False,
+        include_timescales: bool = False,
     ):
         super().__init__()
 
@@ -185,6 +186,7 @@ class ImpliedTimescaleNode(EvaluationNode):
         self._include_pdf = include_pdf
         self._log_scale = log_scale
         self._annotate_timescales = annotate_timescales
+        self._include_timescales = include_timescales
 
     def _eval(self, data):
         trajs_true = data.trajs_true
@@ -223,14 +225,19 @@ class ImpliedTimescaleNode(EvaluationNode):
         group = f"timescales/its_lag_{lag}"
 
         metrics = {}
-        for i, (its_true, its_pred) in enumerate(zip(timescales_true, timescales_pred)):
-            metrics[f"{group}_{i}_true"] = float(its_true)
-            metrics[f"{group}_{i}_pred"] = float(its_pred)
-            # Relative deviation: timescales easily span orders of magnitude,
-            # so an absolute difference is hard to read across systems.
-            metrics[f"{group}_{i}_rel_error"] = float(
-                abs(its_pred - its_true) / abs(its_true)
-            )
+
+        if self._include_timescales:
+            for i, (its_true, its_pred) in enumerate(
+                zip(timescales_true, timescales_pred)
+            ):
+                metrics[f"{group}_{i}_true"] = float(its_true)
+                metrics[f"{group}_{i}_pred"] = float(its_pred)
+
+                # Relative deviation: timescales easily span orders of magnitude,
+                # so an absolute difference is hard to read across systems.
+                metrics[f"{group}_{i}_rel_error"] = float(
+                    abs(its_pred - its_true) / abs(its_true)
+                )
 
         if self._include_pdf:
             metrics[f"{group}_pdf"] = _visualize_timescales(
