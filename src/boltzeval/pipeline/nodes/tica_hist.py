@@ -94,7 +94,7 @@ class TicaHistEval(EvaluationNode):
 # vvvvvvvv Small demo for testing vvvvvvvv
 if __name__ == "__main__":
     from boltzeval.metrics.tica import fit_tica
-    from boltzeval.pipeline import EvalData
+    from boltzeval.pipeline import EvalData, TrajectoryEnsemble
     from boltzeval.utils.hist_visualization import (
         visualize_histogram_2d_dual,
     )
@@ -124,13 +124,16 @@ if __name__ == "__main__":
         # gradient of quadratic wells weighted by soft assignments
         return w1 * (x - c1) + w2 * (x - c2)
 
-    def simulate(T=1000, dt=0.05, sigma=0.4):
+    # Time between two saved frames of the simulation below
+    time_step = 0.05
+
+    def simulate(T=1000, time_step=time_step, sigma=0.4):
         x = np.zeros((T, 2))
         x[0] = np.random.randn(2)
 
         for t in range(1, T):
-            noise = np.sqrt(dt) * sigma * np.random.randn(2)
-            x[t] = x[t - 1] - dt * grad_U(x[t - 1]) + noise
+            noise = np.sqrt(time_step) * sigma * np.random.randn(2)
+            x[t] = x[t - 1] - time_step * grad_U(x[t - 1]) + noise
 
         return x
 
@@ -142,14 +145,16 @@ if __name__ == "__main__":
     # -------------------------------------------------------
     # trajectories from multimodal system
     # -------------------------------------------------------
-    trajectories = [simulate() for _ in range(5)]
+    trajectories = TrajectoryEnsemble.from_array(
+        [simulate() for _ in range(5)], frame_stride=time_step
+    )
 
     # -------------------------------------------------------
     # fit TICA
     # -------------------------------------------------------
     tica_model = fit_tica(
         trajectories=trajectories,
-        lag=10,
+        lag_time=10 * time_step,
         feature_transform=feature_transform,
         dim=2,
     )
@@ -159,9 +164,9 @@ if __name__ == "__main__":
     )
 
     data = EvalData(
-        samples_true=np.concatenate(trajectories),
-        samples_pred=trajectories[0],
+        samples_true=trajectories.as_samples(),
+        samples_pred=trajectories[0].frames,
     )
     metrics = eval_node.eval(data)
     print(metrics)
-    plot_pdf(metrics["tica/vis"], show=True)
+    plot_pdf(metrics["tica/pdf"], show=True)

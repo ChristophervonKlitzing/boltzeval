@@ -2,24 +2,43 @@ import numpy as np
 import deeptime as dt
 from deeptime.base import Transformer
 
-from boltzeval.metrics.feature_transforms import FeatureTransform
+from boltzeval.metrics.feature_transforms import (
+    FeatureTransform,
+    featurize_trajectories,
+)
 from boltzeval.utils.histogram import Histogram
+from boltzeval.utils.trajectory import TrajectoryEnsemble, resolve_frame_lag
 
 
 def fit_tica(
-    trajectories: list[np.ndarray] | np.ndarray,
-    lag: int,
+    trajectories: TrajectoryEnsemble,
+    lag_time: float,
     feature_transform: FeatureTransform,
     dim: int | None = 2,
     use_koopman=False,
 ):
     """
-    Fits a TICA model from a list of trajectories, a lag time and a feature transform.
-    trajectories must be either a list of arrays each of shape (#frames, dim)
-    or one array of shape (#trajectories, #frames, dim)
+    Fit a TICA model from a trajectory ensemble, a physical lag time and a
+    feature transform.
+
+    Parameters
+    ----------
+    trajectories : TrajectoryEnsemble
+        Trajectories to fit on. Their ``frame_stride`` translates ``lag_time``
+        into the frame lag the estimator works with.
+    lag_time : float
+        Lag time in the unit of the ensemble's ``frame_stride``. Must be an
+        integer multiple of it.
+    feature_transform : FeatureTransform
+        Transform applied to the frames of every trajectory.
+    dim : int | None
+        Number of TICA components to keep.
+    use_koopman : bool
+        Whether to reweight non-equilibrium data with a Koopman estimator.
     """
-    featurized_trajs = np.stack([feature_transform(t) for t in trajectories])
-    tica = dt.decomposition.TICA(dim=dim, lagtime=lag)
+    frame_lag = resolve_frame_lag(trajectories, lag_time)
+    featurized_trajs = featurize_trajectories(trajectories, feature_transform)
+    tica = dt.decomposition.TICA(dim=dim, lagtime=frame_lag)
 
     if use_koopman:
         koopman_estimator = dt.covariance.KoopmanWeightingEstimator(lagtime=lag)
@@ -91,13 +110,16 @@ if __name__ == "__main__":
         # gradient of quadratic wells weighted by soft assignments
         return w1 * (x - c1) + w2 * (x - c2)
 
-    def simulate(T=1000, dt=0.05, sigma=0.4):
+    # Time between two saved frames of the simulation below
+    time_step = 0.05
+
+    def simulate(T=1000, time_step=time_step, sigma=0.4):
         x = np.zeros((T, 2))
         x[0] = np.random.randn(2)
 
         for t in range(1, T):
-            noise = np.sqrt(dt) * sigma * np.random.randn(2)
-            x[t] = x[t - 1] - dt * grad_U(x[t - 1]) + noise
+            noise = np.sqrt(time_step) * sigma * np.random.randn(2)
+            x[t] = x[t - 1] - time_step * grad_U(x[t - 1]) + noise
 
         return x
 
@@ -109,14 +131,16 @@ if __name__ == "__main__":
     # -------------------------------------------------------
     # trajectories from multimodal system
     # -------------------------------------------------------
-    trajectories = [simulate() for _ in range(5)]
+    trajectories = TrajectoryEnsemble.from_array(
+        [simulate() for _ in range(5)], frame_stride=time_step
+    )
 
     # -------------------------------------------------------
     # fit TICA
     # -------------------------------------------------------
     tica_model = fit_tica(
         trajectories=trajectories,
-        lag=10,
+        lag_time=10 * time_step,
         feature_transform=feature_transform,
         dim=2,
     )
@@ -124,7 +148,7 @@ if __name__ == "__main__":
     # -------------------------------------------------------
     # project
     # -------------------------------------------------------
-    samples = np.concatenate(trajectories, 0)
+    samples = trajectories.as_samples()
     hist = get_tica_hist(samples, tica_model, feature_transform)
 
     if hist.ndim == 1:

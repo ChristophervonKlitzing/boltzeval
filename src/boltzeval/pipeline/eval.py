@@ -1,15 +1,16 @@
 # orchestrator for running the sample- and energy-based evaluation
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, fields, asdict
+from dataclasses import dataclass, fields
 
-from typing import Any, Literal, Optional, TypeAlias
+from typing import Any, Literal, Optional, Sequence, TypeAlias
 import warnings
 import numpy as np
 
 from boltzeval.utils.histogram import Histogram
 from boltzeval.utils.pdf import PdfBuffer, pdf_to_wandb_image
 from boltzeval.utils.shape_utils import squeeze_last_dim
+from boltzeval.utils.trajectory import Trajectory, TrajectoryEnsemble
 
 import logging
 
@@ -27,6 +28,35 @@ EvalField: TypeAlias = Literal[
     "trajs_true",
     "trajs_pred",
 ]
+
+SAMPLE_FIELDS: tuple[EvalField, ...] = ("samples_true", "samples_pred")
+TRAJECTORY_FIELDS: tuple[EvalField, ...] = ("trajs_true", "trajs_pred")
+
+
+def _as_trajectory_ensemble(value, field_name: str) -> TrajectoryEnsemble:
+    """
+    Accept the convenient spellings of a trajectory field and normalize them
+    into a TrajectoryEnsemble.
+
+    Plain arrays are rejected on purpose: the physical time between two frames
+    cannot be inferred from an array, and silently guessing it would make
+    dynamical metrics quietly incomparable.
+    """
+    if isinstance(value, TrajectoryEnsemble):
+        return value
+
+    if isinstance(value, Trajectory):
+        return TrajectoryEnsemble([value])
+
+    if isinstance(value, Sequence) and all(isinstance(t, Trajectory) for t in value):
+        return TrajectoryEnsemble(list(value))
+
+    raise TypeError(
+        f"'{field_name}' must be a TrajectoryEnsemble (or a Trajectory / a list of "
+        f"Trajectory objects), got '{type(value).__name__}'. Trajectories carry the "
+        f"physical time between two frames, so build them explicitly, e.g. "
+        f"TrajectoryEnsemble.from_array(array, frame_stride=0.1, time_unit='ps')."
+    )
 
 
 @dataclass
@@ -53,11 +83,19 @@ class EvalData:
         Each log-prob array must match the batch size of its corresponding samples.
 
     Trajectories:
-        (T, B, D)
+        TrajectoryEnsemble
 
-        where T = number of trajectories,
-              B = number of frames per trajectory,
-              D = feature dimension (must match sample dimension).
+        A trajectory is not just a batch of samples: its frames are separated
+        by a fixed amount of physical time. Trajectory fields therefore hold a
+        TrajectoryEnsemble (see boltzeval.utils.trajectory), which bundles
+        frames of shape (n_frames, D) per trajectory together with the
+        frame_stride (physical time between two consecutive frames).
+
+        Raw arrays are accepted only via
+        TrajectoryEnsemble.from_array(array, frame_stride=..., time_unit=...),
+        because the frame stride cannot be inferred from an array. Frames of
+        shape (n_frames, n_atoms, 3) are flattened to (n_frames, n_atoms * 3),
+        and the frame dimension D must match the sample dimension.
 
     Attributes
     ----------
@@ -79,16 +117,20 @@ class EvalData:
     pred_samples_model_log_prob : np.ndarray, optional
         Shape (B_pred,). log p_model(x_pred).
 
-    trajs_true : np.ndarray | None
-        Shape (T_true, B_true, D). Reference trajectories.
+    trajs_true : TrajectoryEnsemble | None
+        Reference trajectories, e.g. from an MD simulation.
 
-    trajs_pred : np.ndarray | None
-        Shape (T_pred, B_pred, D). Predicted trajectories.
-        Predicted trajectories for trajectory-based evaluations.
+    trajs_pred : TrajectoryEnsemble | None
+        Predicted trajectories for trajectory-based (dynamical) evaluations.
+        Their frame_stride may differ from the one of trajs_true; dynamical
+        metrics are parameterized by a physical lag time and resolve the
+        corresponding frame lag per ensemble.
 
     Notes
     -----
     - Log-probability arrays must match the corresponding sample batch size.
+    - Time units are never converted. Using the same unit for trajs_true and
+      trajs_pred is the responsibility of the caller.
     """
 
     # This is used internally to provide better error messages
@@ -103,8 +145,8 @@ class EvalData:
     true_samples_model_log_prob: Optional[np.ndarray] = None
     pred_samples_model_log_prob: Optional[np.ndarray] = None
 
-    trajs_true: Optional[np.ndarray] = None
-    trajs_pred: Optional[np.ndarray] = None
+    trajs_true: Optional[TrajectoryEnsemble] = None
+    trajs_pred: Optional[TrajectoryEnsemble] = None
 
     def fits_requirements(self, requirements: list[EvalField]) -> bool:
         return len(self.get_missing_requirements(requirements)) == 0
@@ -115,6 +157,13 @@ class EvalData:
         return [r for r in requirements if getattr(self, r, None) is None]
 
     def __post_init__(self):
+        # Trajectories may be given as a single Trajectory or a sequence of them;
+        # normalize everything to a TrajectoryEnsemble.
+        for k in TRAJECTORY_FIELDS:
+            v = getattr(self, k)
+            if v is not None:
+                setattr(self, k, _as_trajectory_ensemble(v, k))
+
         populated_fields = self._get_populated_fields()
 
         # Remove potential single trailing ones in the fields
@@ -123,15 +172,10 @@ class EvalData:
                 setattr(self, k, squeeze_last_dim(v))
 
         # Flatten molecular samples of shape (B, n_atoms, 3)
+        # (trajectory frames are flattened by the Trajectory type itself)
         for k, v in populated_fields.items():
-            if k in ["samples_true", "samples_pred"] and v.ndim == 3:
+            if k in SAMPLE_FIELDS and v.ndim == 3:
                 setattr(self, k, v.reshape((v.shape[0], -1)))
-
-        # Flatten trajectories if they contain atomic coordinates:
-        # (T, B, n_atoms, 3) -> (T, B, n_atoms * 3)
-        for k, v in populated_fields.items():
-            if k in ["trajs_true", "trajs_pred"] and v.ndim == 4:
-                setattr(self, k, v.reshape(v.shape[0], v.shape[1], -1))
 
         # Fetch potentially updated fields
         populated_fields = self._get_populated_fields()
@@ -139,19 +183,21 @@ class EvalData:
         self._check_type(populated_fields)
         self._check_same_batch_size()
         self._check_sample_shapes(populated_fields)
+        self._check_same_time_unit(populated_fields)
 
-    def _get_populated_fields(self) -> dict[str, np.ndarray]:
+    def _get_populated_fields(self) -> dict[str, np.ndarray | TrajectoryEnsemble]:
         return {
-            k: v
-            for k, v in asdict(self).items()
-            if v is not None
-            if not k.startswith("_")
+            f.name: getattr(self, f.name)
+            for f in fields(self)
+            if not f.name.startswith("_")
+            if getattr(self, f.name) is not None
         }
 
-    def _check_type(self, populated_fields: dict[str, np.ndarray]):
+    def _check_type(self, populated_fields: dict[str, np.ndarray | TrajectoryEnsemble]):
         invalid = [
             f"{k}: {type(v).__name__}"
             for k, v in populated_fields.items()
+            if k not in TRAJECTORY_FIELDS
             if not isinstance(v, np.ndarray)
         ]
 
@@ -213,6 +259,39 @@ class EvalData:
             raise ValueError(
                 f"Dimension mismatch: All samples must have the same dimension (index 1). "
                 f"Detected dimensions at index 1: { {k: s[1] for k, s in sample_shapes.items()} }"
+            )
+
+        # Trajectory frames live in the same space as the samples
+        dims = {k: s[1] for k, s in sample_shapes.items()}
+        dims.update(
+            {k: v.dim for k, v in populated_fields.items() if k in TRAJECTORY_FIELDS}
+        )
+        if len(set(dims.values())) > 1:
+            raise ValueError(
+                f"Dimension mismatch: samples and trajectory frames must have the "
+                f"same feature dimension. Detected dimensions: {dims}"
+            )
+
+    def _check_same_time_unit(
+        self, populated_fields: dict[str, np.ndarray | TrajectoryEnsemble]
+    ):
+        """
+        All trajectories of one EvalData must be expressed in the same time unit.
+
+        Units are never converted, so comparing a reference and a predicted
+        ensemble is only meaningful if both are stated in the same unit.
+        """
+        time_units = {
+            k: v.time_unit
+            for k, v in populated_fields.items()
+            if k in TRAJECTORY_FIELDS
+        }
+
+        if len(set(time_units.values())) > 1:
+            raise ValueError(
+                f"Time unit mismatch: all trajectories of an EvalData must use the "
+                f"same time unit (no unit conversion is performed). "
+                f"Detected time units: {time_units}"
             )
 
     def get_required_fields(self, requirements: list[str]):

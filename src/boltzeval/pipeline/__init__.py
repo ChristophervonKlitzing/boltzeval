@@ -1,3 +1,5 @@
+from boltzeval.utils.trajectory import Trajectory, TrajectoryEnsemble
+
 from .eval import (
     run_eval,
     EvaluationNode,

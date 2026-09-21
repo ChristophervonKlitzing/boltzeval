@@ -3,6 +3,8 @@ from typing import Protocol
 import numpy as np
 import mdtraj as md
 
+from boltzeval.utils.trajectory import TrajectoryEnsemble
+
 
 class FeatureTransform(Protocol):
     def __call__(self, samples: np.ndarray) -> np.ndarray:
@@ -10,6 +12,23 @@ class FeatureTransform(Protocol):
         Converts samples of shape (batch, n_atoms, 3) or (batch, d) into features.
         """
         pass
+
+
+def featurize_trajectories(
+    trajectories: TrajectoryEnsemble,
+    feature_transform: FeatureTransform,
+) -> list[np.ndarray]:
+    """
+    Apply a feature transform to the frames of every trajectory of an ensemble.
+
+    Returns
+    -------
+    list[np.ndarray]
+        One (n_frames, n_features) array per trajectory. A list (rather than a
+        stacked array) keeps trajectories of differing length usable and is the
+        input format expected by the deeptime estimators.
+    """
+    return [feature_transform(traj.frames) for traj in trajectories]
 
 
 def _get_distances(xyz):

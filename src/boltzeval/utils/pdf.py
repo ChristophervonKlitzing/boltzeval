@@ -60,13 +60,27 @@ def save_pdf(obj: PdfBuffer, path: str) -> None:
         f.write(obj.buffer.getbuffer())
 
 
-def save_pdfs(pdfs: dict[str, PdfBuffer], dirpath: str) -> None:
+def save_pdfs(pdfs: dict[str, PdfBuffer], dirpath: str) -> dict[str, str]:
     """
-    Save a dict of pdfs into a directory. dir must exist.
+    Save a dict of pdfs into a directory, which is created if it is missing.
+
+    Names containing "/" (as metric keys do, e.g. "tica/pdf") become
+    subdirectories of `dirpath`.
+
+    Returns
+    -------
+    dict[str, str]
+        The file path every pdf was written to, keyed by its name.
     """
+    fpaths = {}
+
     for name, pdf_buffer in pdfs.items():
         fpath = os.path.join(dirpath, name + ".pdf")
+        os.makedirs(os.path.dirname(fpath), exist_ok=True)
         save_pdf(pdf_buffer, fpath)
+        fpaths[name] = fpath
+
+    return fpaths
 
 
 def _pdf_bytesio_to_image_PyMuPDF(pdf_bytes: bytes, dpi: int):
@@ -115,11 +129,13 @@ def plot_pdf(
 
     ax.imshow(img)
     ax.axis("off")
-    # ax.set_title("PDF Preview")
-    fig.tight_layout()
 
+    # The title must be set before the layout pass, otherwise no space is
+    # reserved for it and it ends up cut off at the top of the figure.
     if title is not None:
         ax.set_title(title, fontsize=fontsize)
+
+    fig.tight_layout()
 
     if show:
         plt.show()
