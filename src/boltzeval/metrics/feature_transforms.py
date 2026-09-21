@@ -321,7 +321,7 @@ def create_sidechain_angles_feature_transform(
 if __name__ == "__main__":
     from openmm import app
 
-    pdb = app.PDBFile("test_files/aldp_topology.pdb")
+    pdb = app.PDBFile("demo/test_files/aldp_topology.pdb")
     topology = md.Topology.from_openmm(pdb.topology)
     pos = pdb.getPositions(asNumpy=True)
     print(np.linalg.norm(pos[0] - pos[2]))

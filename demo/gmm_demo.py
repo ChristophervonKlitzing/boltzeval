@@ -382,7 +382,7 @@ def _run_torsion_single(rng: np.random.Generator) -> dict:
     density sits at the periodic boundary and shows up at the edges of the
     Ramachandran plot rather than in its middle.
     """
-    topology_path = Path(__file__).resolve().parent.parent / "test_files"
+    topology_path = Path(__file__).resolve().parent / "test_files"
     topology_path = topology_path / "aldp_topology.pdb"
 
     if not topology_path.is_file():

@@ -84,7 +84,7 @@ single dataset, looked at from every angle:
 
 The seventh, `TorsionMarginalNodeSingle`, reads backbone angles off a molecule,
 which the two-dimensional toy system does not have. It is therefore shown on
-alanine dipeptide (`test_files/aldp_topology.pdb`), with structures faked as
+alanine dipeptide (`demo/test_files/aldp_topology.pdb`), with structures faked as
 noise around the reference conformation. That conformation is fully extended
 (phi = psi = pi), so the density appears at the edges of the Ramachandran plot
 rather than in its middle.
