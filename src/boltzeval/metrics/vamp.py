@@ -97,7 +97,7 @@ def get_implied_timescales(
     trajectories: TrajectoryEnsemble,
     lag_time: float,
     feature_transform: FeatureTransform,
-    n_timescales: int = 2,
+    n_timescales: int | None = None,
     name: str = "trajectories",
 ) -> np.ndarray:
     """
@@ -117,8 +117,10 @@ def get_implied_timescales(
         ensemble's ``frame_stride``.
     feature_transform : FeatureTransform
         Transform applied to the frames of every trajectory.
-    n_timescales : int
-        Number of (slowest) timescales to return.
+    n_timescales : int | None
+        Number of (slowest) timescales to return. By default all available
+        ones, which is one per feature dimension - fewer if the estimated
+        covariances are not of full rank.
 
     Returns
     -------

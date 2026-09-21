@@ -206,12 +206,10 @@ def run_trajectory_demo(
     pipeline = [
         # Dynamical: how much slow dynamics does the model capture?
         VampNode(lag_time=lag_time, feature_transform=feature_transform, r=2.0),
-        # Dynamical: relaxation timescales, reported in ps
-        ImpliedTimescaleNode(
-            lag_time=lag_time,
-            feature_transform=feature_transform,
-            n_timescales=1,
-        ),
+        # Dynamical: relaxation timescales, reported in ps, plus a parity plot.
+        # Without n_timescales, all available ones are compared (here: two,
+        # one per feature dimension of the identity transform).
+        ImpliedTimescaleNode(lag_time=lag_time, feature_transform=feature_transform),
         # Static: the distribution the trajectories sample, in TICA coordinates
         TicaHistEval(
             tica=tica_model,

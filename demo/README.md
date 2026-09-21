@@ -55,7 +55,7 @@ meaningless.
 | node | what it reports |
 | --- | --- |
 | `VampNode` | VAMP-2 score of both ensembles and their gap |
-| `ImpliedTimescaleNode` | slowest relaxation timescale in ps, and its relative error |
+| `ImpliedTimescaleNode` | slowest relaxation timescales in ps, their relative error, and a parity plot against the reference |
 | `TicaHistEval` | the sampled distribution in TICA coordinates (TICA fitted on the reference) |
 | `CoordinateMarginalEval` | plain coordinate marginals of the pooled frames |
 
