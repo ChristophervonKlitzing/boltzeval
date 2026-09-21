@@ -1,4 +1,5 @@
 from typing import Any
+import os
 import warnings
 import numpy as np
 
@@ -510,3 +511,26 @@ class Histogram:
             bin_edges=bin_edges,
             n_producing_samples=n_samples,
         )
+
+
+def save_histograms(histograms: dict[str, Histogram], dirpath: str) -> dict[str, str]:
+    """
+    Save a dict of histograms into a directory, which is created if it is missing.
+
+    Names containing "/" (as metric keys do, e.g. "tica/histogram") become
+    subdirectories of `dirpath`.
+
+    Returns
+    -------
+    dict[str, str]
+        The file path every histogram was written to, keyed by its name.
+    """
+    fpaths = {}
+
+    for name, histogram in histograms.items():
+        fpath = os.path.join(dirpath, name + ".npz")
+        os.makedirs(os.path.dirname(fpath), exist_ok=True)
+        histogram.save(fpath)
+        fpaths[name] = fpath
+
+    return fpaths
