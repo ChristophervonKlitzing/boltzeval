@@ -20,18 +20,51 @@ Evaluation is performed by composing a list of modular evaluation nodes.
 ### Example
 ```python
 from boltzeval.pipeline import run_eval, EvalData
-from boltzeval.pipeline.energy_hist import EnergyHistComparison
+from boltzeval.pipeline.nodes import EnergyHistNode
 from boltzeval.metrics.hist_comparison import get_hist_jensen_shannon
 
 # === Construct evaluation pipeline ===
 eval_pipeline = []
-eval_pipeline.append(EnergyHistEval(hist_metrics=[get_hist_jensen_shannon]))
+eval_pipeline.append(EnergyHistNode(hist_metrics=[get_hist_jensen_shannon]))
 
 # === Prepare data for evaluation ===
 data = EvalData(true_samples_target_log_prob=..., pred_samples_target_log_prob=...)
 
 metrics = run_eval(data, pipeline=eval_pipeline)
 ```
+
+### Single-dataset nodes
+Every node comes in two flavors:
+
+- `<Name>Node` compares a prediction against a reference and therefore requires
+  both, e.g. `samples_true` **and** `samples_pred`.
+- `<Name>NodeSingle` looks at one dataset on its own and requires only the
+  `*_true` fields.
+
+The single variants exist for visualizing a dataset rather than scoring a model
+against it: their plots carry no "true"/"pred" titles or legends, and metrics
+that need both datasets (histogram comparisons, score gaps, relative errors)
+are omitted. Their default output is the visualization; the underlying raw data
+is opt-in:
+
+```python
+from boltzeval.pipeline.nodes import TicaHistNodeSingle
+
+eval_pipeline.append(
+    TicaHistNodeSingle(
+        tica=tica_model,
+        feature_transform=feature_transform,
+        include_histogram=True,    # off by default
+        include_projections=True,  # off by default
+    )
+)
+
+data = EvalData(samples_true=samples)
+```
+
+Available pairs: `EnergyHistNode`, `TicaHistNode`, `CoordinateMarginalNode`,
+`SamplePlot2DNode`, `TorsionMarginalNode`, `VampNode` and
+`ImpliedTimescaleNode`, each with its `...Single` counterpart.
 
 ### Trajectories
 Samples are plain arrays, but a trajectory is more than a batch of samples: its

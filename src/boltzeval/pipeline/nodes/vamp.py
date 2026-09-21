@@ -6,7 +6,11 @@ from matplotlib import ticker
 
 from boltzeval.metrics.feature_transforms import FeatureTransform
 from boltzeval.pipeline import EvaluationNode
-from boltzeval.metrics.vamp import get_implied_timescales, get_vamp_r_score_pair
+from boltzeval.metrics.vamp import (
+    get_implied_timescales,
+    get_vamp_r_score,
+    get_vamp_r_score_pair,
+)
 from boltzeval.utils.pdf import PdfBuffer, matplotlib_to_pdf_buffer
 from boltzeval.utils.trajectory import TrajectoryEnsemble
 
@@ -66,6 +70,64 @@ class VampNode(EvaluationNode):
         return metrics
 
 
+def _use_readable_log_ticks(axis):
+    """
+    Over a range of a few decades the default log formatter labels the minor
+    ticks as well, which overlap into an unreadable smear. Label the 1/2/5
+    decades instead, so that a narrow range still gets a few ticks.
+    """
+    axis.set_major_locator(ticker.LogLocator(base=10.0, subs=(1.0, 2.0, 5.0)))
+    axis.set_major_formatter(ticker.ScalarFormatter())
+    axis.set_minor_formatter(ticker.NullFormatter())
+
+
+def _timescale_label(time_unit: str | None) -> str:
+    return "timescale" + (f" / {time_unit}" if time_unit is not None else "")
+
+
+def _visualize_timescale_spectrum(
+    timescales: np.ndarray,
+    time_unit: str | None,
+    log_scale: bool = True,
+    annotate_timescales: bool = False,
+) -> PdfBuffer:
+    """
+    Plot the implied timescales of a single ensemble against their index.
+    """
+    fig, ax = plt.subplots(figsize=(5, 4))
+
+    indices = np.arange(len(timescales))
+    ax.plot(indices, timescales, marker="o", linestyle="none", color="crimson")
+
+    # Label every point with its timescale
+    if annotate_timescales:
+        for i, its in zip(indices, timescales):
+            ax.annotate(
+                f"{its:.3g}",
+                (i, its),
+                textcoords="offset points",
+                xytext=(7, 4),
+                fontsize=9,
+            )
+
+    # A log scale is the natural one for timescales, but it cannot show the
+    # non-positive values a badly conditioned estimate may produce.
+    if log_scale and bool(np.all(timescales > 0.0)):
+        ax.set_yscale("log")
+        _use_readable_log_ticks(ax.yaxis)
+
+    ax.set_xlabel("process index")
+    ax.set_ylabel(_timescale_label(time_unit))
+    ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+
+    # The plot exists to read values off, and it carries no title to orient by
+    ax.grid(True, alpha=0.3)
+
+    pdf = matplotlib_to_pdf_buffer(fig)
+    plt.close(fig)
+    return pdf
+
+
 def _visualize_timescales(
     timescales_true: np.ndarray,
     timescales_pred: np.ndarray,
@@ -93,14 +155,8 @@ def _visualize_timescales(
         ax.set_xscale("log")
         ax.set_yscale("log")
         low, high = low / 2.0, high * 2.0
-
-        # Over a range of a few decades the default log formatter labels the
-        # minor ticks as well, which overlap into an unreadable smear. Label
-        # the 1/2/5 decades instead, so a narrow range still gets a few ticks.
-        for axis in (ax.xaxis, ax.yaxis):
-            axis.set_major_locator(ticker.LogLocator(base=10.0, subs=(1.0, 2.0, 5.0)))
-            axis.set_major_formatter(ticker.ScalarFormatter())
-            axis.set_minor_formatter(ticker.NullFormatter())
+        _use_readable_log_ticks(ax.xaxis)
+        _use_readable_log_ticks(ax.yaxis)
     else:
         padding = 0.1 * (high - low) if high > low else 0.1 * max(abs(high), 1.0)
         low, high = low - padding, high + padding
@@ -135,9 +191,8 @@ def _visualize_timescales(
                 fontsize=9,
             )
 
-    unit = f" / {time_unit}" if time_unit is not None else ""
-    ax.set_xlabel(f"reference timescale{unit}")
-    ax.set_ylabel(f"predicted timescale{unit}")
+    ax.set_xlabel(f"reference {_timescale_label(time_unit)}")
+    ax.set_ylabel(f"predicted {_timescale_label(time_unit)}")
 
     ax.set_xlim(low, high)
     ax.set_ylim(low, high)
@@ -243,6 +298,138 @@ class ImpliedTimescaleNode(EvaluationNode):
             metrics[f"{group}_pdf"] = _visualize_timescales(
                 timescales_true=timescales_true,
                 timescales_pred=timescales_pred,
+                time_unit=trajs_true.time_unit,
+                log_scale=self._log_scale,
+                annotate_timescales=self._annotate_timescales,
+            )
+
+        return metrics
+
+
+class VampNodeSingle(EvaluationNode):
+    """
+    VAMP-r score of a single trajectory ensemble.
+
+    The single-dataset counterpart of :class:`VampNode`: it scores the
+    reference trajectories on their own, without a predicted ensemble to
+    compare against, so no score gap is produced.
+    """
+
+    requirements = ["trajs_true"]
+
+    def __init__(
+        self,
+        lag_time: float,
+        feature_transform: FeatureTransform,
+        r=2.0,
+    ):
+        """
+        Parameters
+        ----------
+        lag_time : float
+            Physical lag time the score is evaluated at. Must be an integer
+            multiple of the ensemble's frame stride.
+        feature_transform : FeatureTransform
+            Transform applied to the frames before scoring.
+        r : float
+            Order of the VAMP score (2.0 = VAMP-2).
+        """
+        super().__init__()
+
+        self._lag_time = lag_time
+        self._feature_transform = feature_transform
+        self._r = r
+
+    def _eval(self, data):
+        trajs_true = data.trajs_true
+
+        vamp_r = get_vamp_r_score(
+            trajs_true,
+            lag_time=self._lag_time,
+            feature_transform=self._feature_transform,
+            r=self._r,
+            name="trajs_true",
+        )
+
+        lag = _lag_label(self._lag_time, trajs_true)
+        return {f"vamp/vamp_{self._r}_lag_{lag}": vamp_r}
+
+
+class ImpliedTimescaleNodeSingle(EvaluationNode):
+    """
+    Implied (relaxation) timescales of a single trajectory ensemble.
+
+    The single-dataset counterpart of :class:`ImpliedTimescaleNode`: it reports
+    the timescales of the reference trajectories on their own, so there is no
+    relative error and the visualization is the timescale spectrum rather than
+    a parity plot.
+    """
+
+    requirements = ["trajs_true"]
+
+    def __init__(
+        self,
+        lag_time: float,
+        feature_transform: FeatureTransform,
+        n_timescales: int | None = None,
+        include_pdf: bool = True,
+        log_scale: bool = True,
+        annotate_timescales: bool = False,
+        include_timescales: bool = False,
+    ):
+        """
+        Parameters
+        ----------
+        lag_time : float
+            Physical lag time of the Koopman estimate. Must be an integer
+            multiple of the ensemble's frame stride.
+        feature_transform : FeatureTransform
+            Transform applied to the frames of every trajectory.
+        n_timescales : int | None
+            Number of (slowest) timescales to report. All available ones if
+            None, which is one per feature dimension.
+        include_pdf : bool
+            Whether to produce the visualization of the timescale spectrum.
+        log_scale : bool
+            Whether to plot the timescales on a logarithmic axis.
+        annotate_timescales : bool
+            Whether to label every point of the plot with its timescale.
+        include_timescales : bool
+            Whether to also return the raw timescales as scalars.
+        """
+        super().__init__()
+
+        self._lag_time = lag_time
+        self._feature_transform = feature_transform
+        self._n_timescales = n_timescales
+        self._include_pdf = include_pdf
+        self._log_scale = log_scale
+        self._annotate_timescales = annotate_timescales
+        self._include_timescales = include_timescales
+
+    def _eval(self, data):
+        trajs_true = data.trajs_true
+
+        timescales = get_implied_timescales(
+            trajs_true,
+            lag_time=self._lag_time,
+            feature_transform=self._feature_transform,
+            n_timescales=self._n_timescales,
+            name="trajs_true",
+        )
+
+        lag = _lag_label(self._lag_time, trajs_true)
+        group = f"timescales/its_lag_{lag}"
+
+        metrics = {}
+
+        if self._include_timescales:
+            for i, its in enumerate(timescales):
+                metrics[f"{group}_{i}"] = float(its)
+
+        if self._include_pdf:
+            metrics[f"{group}_pdf"] = _visualize_timescale_spectrum(
+                timescales=timescales,
                 time_unit=trajs_true.time_unit,
                 log_scale=self._log_scale,
                 annotate_timescales=self._annotate_timescales,

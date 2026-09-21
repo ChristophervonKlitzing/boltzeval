@@ -10,6 +10,7 @@ from boltzeval.metrics.torsion_marginals import (
     get_free_energy_difference,
     get_torsion_angles,
     get_torsion_marginal_hists,
+    visualize_torsion_marginals,
     visualize_torsion_marginals_dual,
 )
 from boltzeval.pipeline.eval import EvaluationNode
@@ -18,7 +19,27 @@ from boltzeval.utils.histogram import Histogram
 from boltzeval.utils.shape_utils import reshape_to_molecular
 
 
-class TorsionMarginalEval(EvaluationNode):
+def _flatten_marginals(
+    marginals: tuple[list[Histogram], list[Histogram], list[Histogram]],
+    prefix: str,
+) -> dict[str, Histogram]:
+    """
+    Flatten the per-torsion-pair histograms into one dict of metric keys.
+    """
+    d: dict[str, Histogram] = {}
+    for i, (ram_hist, phi_hist, psi_hist) in enumerate(zip(*marginals)):
+        key_part = f"torsion_marginals/{prefix}hist_{i}"
+        d[f"{key_part}_phi_psi"] = ram_hist
+        d[f"{key_part}_phi"] = phi_hist
+        d[f"{key_part}_psi"] = psi_hist
+    return d
+
+
+class TorsionMarginalNode(EvaluationNode):
+    """
+    Compares the backbone torsion marginals of predicted against reference samples.
+    """
+
     requirements = ["samples_pred", "samples_true"]
 
     def __init__(
@@ -102,24 +123,83 @@ class TorsionMarginalEval(EvaluationNode):
             key = f"torsion_marginals/{infill}_pdf"
             metrics[key] = pdf_buffer
 
-        def flatten_marginals(
-            marginals: tuple[list[Histogram], list[Histogram], list[Histogram]],
-            prefix: str,
-        ):
-            d: dict[str, Histogram] = {}
-            for i, (ram_hist, phi_hist, psi_hist) in enumerate(zip(*marginals)):
-                key_part = f"torsion_marginals/{prefix}_hist_{i}"
-                d[f"{key_part}_phi_psi"] = ram_hist
-                d[f"{key_part}_phi"] = phi_hist
-                d[f"{key_part}_psi"] = psi_hist
-            return d
-
         if self.include_true_histograms:
-            flattened_marginals_true = flatten_marginals(torsion_marginals_true, "true")
-            metrics.update(flattened_marginals_true)
+            metrics.update(_flatten_marginals(torsion_marginals_true, "true_"))
 
         if self.include_pred_histograms:
-            flattened_marginals_pred = flatten_marginals(torsion_marginals_pred, "pred")
-            metrics.update(flattened_marginals_pred)
+            metrics.update(_flatten_marginals(torsion_marginals_pred, "pred_"))
+
+        return metrics
+
+
+class TorsionMarginalNodeSingle(EvaluationNode):
+    """
+    Backbone torsion marginals of a single set of samples.
+
+    The single-dataset counterpart of :class:`TorsionMarginalNode`: it
+    visualizes the phi/psi marginals of the reference samples on their own, so
+    no histogram comparison metrics are produced.
+    """
+
+    requirements = ["samples_true"]
+
+    def __init__(
+        self,
+        topology: md.Topology,
+        vis_mode: VisualizationMode = plot_as_log_density,
+        include_pdf: bool = True,
+        include_histograms: bool = False,
+        include_free_energy_difference: bool = False,
+    ):
+        """
+        Parameters
+        ----------
+        topology : md.Topology
+            Topology describing the molecular system of the samples.
+        vis_mode : VisualizationMode
+            How the histograms are mapped to plotted values.
+        include_pdf : bool
+            Whether to produce the visualization of the torsion marginals.
+        include_histograms : bool
+            Whether to also return the raw histograms.
+        include_free_energy_difference : bool
+            Whether to also report the free energy difference between the two
+            phi regions, which is a single-dataset quantity.
+        """
+        super().__init__()
+        self._topology = topology
+        self.vis_mode = vis_mode
+
+        self.include_pdf = include_pdf
+        self.include_histograms = include_histograms
+        self.include_free_energy_difference = include_free_energy_difference
+
+    def _eval(self, data):
+        metrics = {}
+
+        samples = reshape_to_molecular(data.samples_true)
+
+        angles = get_torsion_angles(samples, self._topology)
+        torsion_marginals = get_torsion_marginal_hists(*angles)
+
+        if self.include_free_energy_difference:
+            # Computed on the phi angles
+            # (neg log weight ratio between high and low energy region)
+            phis = angles[0]
+            metrics["torsion_marginals/free_energy_difference"] = (
+                get_free_energy_difference(phis)
+            )
+
+        if self.include_pdf:
+            pdf_buffer = visualize_torsion_marginals(
+                torsion_marginals=torsion_marginals,
+                vis_mode=self.vis_mode,
+            )
+
+            infill = self.vis_mode.id
+            metrics[f"torsion_marginals/{infill}_pdf"] = pdf_buffer
+
+        if self.include_histograms:
+            metrics.update(_flatten_marginals(torsion_marginals, ""))
 
         return metrics

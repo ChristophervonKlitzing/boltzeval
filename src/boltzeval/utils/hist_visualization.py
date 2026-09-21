@@ -159,7 +159,9 @@ def visualize_histogram_1d(
 
     fig.tight_layout()
 
-    if ax is None:
+    # `ax` is no longer None here when this function created the figure itself,
+    # so the ownership flag decides whether there is a figure to return.
+    if new_plot:
         pdf_buffer = matplotlib_to_pdf_buffer(fig)
     else:
         pdf_buffer = None

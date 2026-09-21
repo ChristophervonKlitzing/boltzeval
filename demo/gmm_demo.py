@@ -1,14 +1,16 @@
 """
 End-to-end boltzeval demos on a two-mode Gaussian mixture.
 
-Two independent demos show the two kinds of evaluation:
+Three independent demos show the kinds of evaluation:
 
 * :func:`run_sample_demo` evaluates i.i.d. *samples*, i.e. how well a model
   reproduces the equilibrium (Boltzmann) distribution.
 * :func:`run_trajectory_demo` evaluates *trajectories*, i.e. how well a model
   reproduces the dynamics on top of that distribution.
+* :func:`run_single_demo` describes *one* dataset on its own, without anything
+  to compare it against, using every single-dataset node there is.
 
-Both build an evaluation pipeline out of nodes, hand it an ``EvalData``
+All of them build an evaluation pipeline out of nodes, hand it an ``EvalData``
 container and let ``run_eval`` produce a flat dictionary of metrics.
 
 Run both demos with::
@@ -20,7 +22,9 @@ Run both demos with::
 
 import argparse
 import os
+from pathlib import Path
 
+import mdtraj as md
 import numpy as np
 
 from boltzeval.metrics.feature_transforms import IdentityFeatureTransform
@@ -31,12 +35,19 @@ from boltzeval.metrics.hist_comparison import (
 from boltzeval.metrics.tica import fit_tica
 from boltzeval.pipeline import EvalData, get_pdfs, get_scalar_metrics, run_eval
 from boltzeval.pipeline.nodes import (
-    CoordinateMarginalEval,
-    EnergyHistEval,
+    CoordinateMarginalNode,
+    CoordinateMarginalNodeSingle,
+    EnergyHistNode,
+    EnergyHistNodeSingle,
     ImpliedTimescaleNode,
-    SamplePlot2DEval,
-    TicaHistEval,
+    ImpliedTimescaleNodeSingle,
+    SamplePlot2DNode,
+    SamplePlot2DNodeSingle,
+    TicaHistNode,
+    TicaHistNodeSingle,
+    TorsionMarginalNodeSingle,
     VampNode,
+    VampNodeSingle,
 )
 from boltzeval.utils.pdf import plot_pdf, save_pdfs
 
@@ -98,20 +109,20 @@ def run_sample_demo(
     # === Construct the evaluation pipeline ===
     pipeline = [
         # Scatter of both sample sets on top of the target log density
-        SamplePlot2DEval(
+        SamplePlot2DNode(
             target_log_prob_fn=target.log_prob,
             xlim=(-4.0, 4.0),
             ylim=(-2.5, 2.5),
             log_prob_range=(-12.0, 0.0),
         ),
         # 1D marginals of x and y plus the joint 2D marginal
-        CoordinateMarginalEval(
+        CoordinateMarginalNode(
             marginals=[(0,), (1,), (0, 1)],
             hist_metrics=[get_hist_jensen_shannon, get_hist_total_variation],
             n_bins=60,
         ),
         # Histogram of the target energies -log p(x) of both sample sets
-        EnergyHistEval(hist_metrics=[get_hist_jensen_shannon]),
+        EnergyHistNode(hist_metrics=[get_hist_jensen_shannon]),
     ]
 
     # === Prepare the data for evaluation ===
@@ -211,13 +222,13 @@ def run_trajectory_demo(
         # one per feature dimension of the identity transform).
         ImpliedTimescaleNode(lag_time=lag_time, feature_transform=feature_transform),
         # Static: the distribution the trajectories sample, in TICA coordinates
-        TicaHistEval(
+        TicaHistNode(
             tica=tica_model,
             feature_transform=feature_transform,
             hist_metrics=[get_hist_jensen_shannon],
         ),
         # Static: the plain coordinate marginals
-        CoordinateMarginalEval(
+        CoordinateMarginalNode(
             marginals=[(0,), (1,)],
             hist_metrics=[get_hist_jensen_shannon],
             n_bins=60,
@@ -240,15 +251,183 @@ def run_trajectory_demo(
     return metrics
 
 
+def run_single_demo(
+    out_dir: str | None = None, seed: int = 0, show: bool = False
+) -> dict:
+    """
+    Describe a single dataset with every single-dataset node there is.
+
+    Sometimes there is nothing to compare against: a reference simulation has
+    just finished, or a model was sampled without a ground truth at hand. The
+    ``...NodeSingle`` variants cover that case. They require only the ``*_true``
+    fields, produce visualizations without "true"/"pred" titles or legends, and
+    omit every metric that needs two datasets. Their raw data (histograms, TICA
+    projections, timescales) is opt-in.
+
+    One set of Langevin trajectories serves as that single dataset here, and is
+    looked at from every angle: as a scatter over the target density, as
+    coordinate marginals, as an energy histogram, in TICA coordinates, and
+    through its dynamics. Only the torsion marginals need a molecular system,
+    so they are shown on alanine dipeptide instead.
+
+    Parameters
+    ----------
+    out_dir : str | None
+        If given, all PDF visualizations are written into this directory.
+    seed : int
+        Seed of the random number generator.
+    show : bool
+        Whether to display the visualizations on screen (one window per plot).
+
+    Returns
+    -------
+    dict
+        The flat metrics dictionary returned by ``run_eval``.
+    """
+    print("\n" + "=" * 70)
+    print("Single-dataset demo: describing one dataset on its own")
+    print("=" * 70)
+
+    rng = np.random.default_rng(seed)
+    target = make_double_well_mixture()
+
+    # === The one dataset: overdamped Langevin trajectories ===
+    trajs = simulate_overdamped_langevin(
+        target,
+        rng,
+        n_trajectories=8,
+        n_steps=10_000,
+        time_step=0.005,  # ps
+        save_stride=1,  # -> frame_stride = 0.005 ps
+    )
+    # The static nodes want the same data as a plain sample batch. The pooled
+    # frames are in time order and strongly correlated, so shuffle them: nodes
+    # that subsample the batch (the scatter plot) would otherwise only ever see
+    # the beginning of the first trajectory.
+    samples = trajs.as_samples()
+    rng.shuffle(samples)
+
+    print(f"trajectories: {trajs}")
+    print(f"pooled frames: {samples.shape}")
+
+    lag_time = 0.1  # ps
+    feature_transform = IdentityFeatureTransform()
+
+    tica_model = fit_tica(
+        trajectories=trajs,
+        lag_time=lag_time,
+        feature_transform=feature_transform,
+        dim=2,
+    )
+
+    # === Construct the evaluation pipeline ===
+    pipeline = [
+        # Where the samples lie on the target density
+        SamplePlot2DNodeSingle(
+            target_log_prob_fn=target.log_prob,
+            xlim=(-4.0, 4.0),
+            ylim=(-2.5, 2.5),
+            log_prob_range=(-12.0, 0.0),
+        ),
+        # The coordinate marginals, keeping the raw histograms
+        CoordinateMarginalNodeSingle(
+            marginals=[(0,), (1,), (0, 1)],
+            n_bins=60,
+            include_histograms=True,
+        ),
+        # The distribution of target energies
+        EnergyHistNodeSingle(include_histogram=True),
+        # The distribution in TICA coordinates, keeping the raw projections
+        TicaHistNodeSingle(
+            tica=tica_model,
+            feature_transform=feature_transform,
+            include_projections=True,
+        ),
+        # How much slow dynamics there is to capture
+        VampNodeSingle(lag_time=lag_time, feature_transform=feature_transform),
+        # The relaxation timescales, as a labelled spectrum
+        ImpliedTimescaleNodeSingle(
+            lag_time=lag_time,
+            feature_transform=feature_transform,
+            include_timescales=True,
+            annotate_timescales=True,
+        ),
+    ]
+
+    # === Prepare the data for evaluation ===
+    # Note that only the *_true fields are needed: there is no prediction here.
+    data = EvalData(
+        samples_true=samples,
+        true_samples_target_log_prob=target.log_prob(samples),
+        trajs_true=trajs,
+    )
+
+    metrics = run_eval(data, pipeline=pipeline)
+
+    # The torsion marginals are the one single node the 2D toy system cannot
+    # show, since they need a molecule to read backbone angles off.
+    metrics.update(_run_torsion_single(rng))
+
+    _report(metrics, out_dir, show)
+    return metrics
+
+
+def _run_torsion_single(rng: np.random.Generator) -> dict:
+    """
+    Run TorsionMarginalNodeSingle on alanine dipeptide.
+
+    The structures are faked the same way as everywhere else in these demos, by
+    adding Gaussian noise to the atom positions of the reference conformation.
+    That conformation is fully extended (phi = psi = pi), so the resulting
+    density sits at the periodic boundary and shows up at the edges of the
+    Ramachandran plot rather than in its middle.
+    """
+    topology_path = Path(__file__).resolve().parent.parent / "test_files"
+    topology_path = topology_path / "aldp_topology.pdb"
+
+    if not topology_path.is_file():
+        print(f"\nSkipping the torsion marginals: {topology_path} not found.")
+        return {}
+
+    pdb = md.load(str(topology_path))
+    print(f"\nalanine dipeptide: {pdb.topology}")
+
+    # (n_samples, n_atoms, 3); EvalData flattens this to (n_samples, n_atoms * 3)
+    samples = pdb.xyz[0] + 0.02 * rng.normal(size=(2_000, *pdb.xyz[0].shape))
+
+    data = EvalData(samples_true=samples)
+    pipeline = [
+        TorsionMarginalNodeSingle(
+            topology=pdb.topology,
+            include_free_energy_difference=True,
+        )
+    ]
+    return run_eval(data, pipeline=pipeline)
+
+
 def _report(metrics: dict, out_dir: str | None, show: bool = False):
     """
     Print the scalar metrics, and write and/or display the visualizations.
     """
+    scalars = get_scalar_metrics(metrics)
     print("\n--- scalar metrics ---")
-    for key, value in sorted(get_scalar_metrics(metrics).items()):
+    for key, value in sorted(scalars.items()):
         print(f"{key:<55s} {value: .6f}")
 
     pdfs = get_pdfs(metrics)
+
+    # Whatever is neither a scalar nor a plot is raw data a node was asked to
+    # hand back, e.g. histograms or TICA projections
+    raw_data = {
+        k: v for k, v in metrics.items() if k not in scalars if k not in pdfs
+    }
+    if raw_data:
+        print(f"\n--- {len(raw_data)} raw data entries ---")
+        for key, value in sorted(raw_data.items()):
+            if isinstance(value, np.ndarray):
+                value = f"ndarray(shape={value.shape})"
+            print(f"{key:<55s} {value}")
+
     print(f"\n--- {len(pdfs)} visualization(s) ---")
 
     if out_dir is None:
@@ -281,22 +460,25 @@ def main():
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--demo",
-        choices=["samples", "trajectories", "both"],
-        default="both",
-        help="which demo to run (default: both)",
+        choices=["samples", "trajectories", "single", "all"],
+        default="all",
+        help="which demo to run (default: all)",
     )
     args = parser.parse_args()
 
     def sub_dir(name: str) -> str | None:
         return None if args.out_dir is None else os.path.join(args.out_dir, name)
 
-    if args.demo in ("samples", "both"):
+    if args.demo in ("samples", "all"):
         run_sample_demo(out_dir=sub_dir("samples"), seed=args.seed, show=args.show)
 
-    if args.demo in ("trajectories", "both"):
+    if args.demo in ("trajectories", "all"):
         run_trajectory_demo(
             out_dir=sub_dir("trajectories"), seed=args.seed, show=args.show
         )
+
+    if args.demo in ("single", "all"):
+        run_single_demo(out_dir=sub_dir("single"), seed=args.seed, show=args.show)
 
 
 if __name__ == "__main__":

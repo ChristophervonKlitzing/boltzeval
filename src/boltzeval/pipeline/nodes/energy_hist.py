@@ -8,11 +8,19 @@ from boltzeval.metrics.hist_comparison import (
 from boltzeval.pipeline.eval import EvaluationNode
 from boltzeval.utils.hist_visualization import (
     plot_as_density,
+    visualize_histogram_1d,
     visualize_histogram_1d_dual,
 )
 
 
-class EnergyHistEval(EvaluationNode):
+ENERGY_LABEL = r"energy / $k_B T$"
+
+
+class EnergyHistNode(EvaluationNode):
+    """
+    Compares the target energy histogram of predicted against reference samples.
+    """
+
     requirements = ["true_samples_target_log_prob", "pred_samples_target_log_prob"]
 
     def __init__(
@@ -79,7 +87,7 @@ class EnergyHistEval(EvaluationNode):
                 true_hist=true_energy_hist,
                 pred_hist=pred_energy_hist,
                 vis_mode=plot_as_density,
-                xlabel=r"energy / $k_B T$",
+                xlabel=ENERGY_LABEL,
                 ylabel="density",
             )
             metrics["energy_hist/pdf"] = energy_hist_pdf
@@ -90,6 +98,63 @@ class EnergyHistEval(EvaluationNode):
         for hist_metric in self.hist_metrics:
             m = hist_metric(true_energy_hist, pred_energy_hist)
             metrics[f"energy_hist/{hist_metric.id}"] = m
+
+        return metrics
+
+
+class EnergyHistNodeSingle(EvaluationNode):
+    """
+    Target energy histogram of a single set of samples.
+
+    The single-dataset counterpart of :class:`EnergyHistNode`: it visualizes
+    the energies of the reference samples on their own, without anything to
+    compare them against, so no histogram comparison metrics are produced.
+    """
+
+    requirements = ["true_samples_target_log_prob"]
+
+    def __init__(
+        self,
+        include_pdf: bool = True,
+        include_histogram: bool = False,
+        energy_range: tuple[float, float] | None = None,
+    ):
+        """
+        Parameters
+        ----------
+        include_pdf : bool
+            Whether to produce the visualization of the energy histogram.
+        include_histogram : bool
+            Whether to also return the raw histogram.
+        energy_range : tuple[float, float] | None
+            Explicit histogram range. Determined from the energies if None.
+        """
+        super().__init__()
+        self.include_pdf = include_pdf
+        self.include_histogram = include_histogram
+        self.energy_range = energy_range
+
+    def _eval(self, data):
+        metrics = {}
+
+        log_probs = data.true_samples_target_log_prob
+
+        energy_range = self.energy_range
+        if energy_range is None:
+            energy_range = determine_energy_hist_range(log_probs)
+
+        energy_hist = get_energy_hist(log_probs, energy_range=energy_range)
+
+        if self.include_histogram:
+            metrics["energy_hist/hist"] = energy_hist
+
+        if self.include_pdf:
+            metrics["energy_hist/pdf"] = visualize_histogram_1d(
+                energy_hist,
+                vis_mode=plot_as_density,
+                xlabel=ENERGY_LABEL,
+                ylabel="density",
+            )
 
         return metrics
 
@@ -138,7 +203,7 @@ if __name__ == "__main__":
         pred_samples_model_log_prob=pred_samples_model_log_prob,
     )
 
-    pipeline = [EnergyHistEval(hist_metrics=[get_hist_jensen_shannon])]
+    pipeline = [EnergyHistNode(hist_metrics=[get_hist_jensen_shannon])]
 
     # -------------------------
     # Run evaluation

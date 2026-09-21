@@ -6,9 +6,10 @@ adding a little Gaussian noise to reference data, so the demos run in seconds
 and still produce a visible metric gap.
 
 ```bash
-python -m demo.gmm_demo                          # run both demos
+python -m demo.gmm_demo                          # run all three demos
 python -m demo.gmm_demo --demo samples           # only the sample-based demo
 python -m demo.gmm_demo --demo trajectories      # only the trajectory demo
+python -m demo.gmm_demo --demo single            # only the single-dataset demo
 python -m demo.gmm_demo --out-dir out            # also write the plots as PDFs
 python -m demo.gmm_demo --show                   # also show the plots on screen
 ```
@@ -24,9 +25,9 @@ an independent set blurred with Gaussian noise. The pipeline is built from:
 
 | node | what it reports |
 | --- | --- |
-| `SamplePlot2DEval` | scatter of both sample sets over the target log density |
-| `CoordinateMarginalEval` | 1D and 2D coordinate marginals plus JSD / total variation |
-| `EnergyHistEval` | histogram of the target energies and its JSD |
+| `SamplePlot2DNode` | scatter of both sample sets over the target log density |
+| `CoordinateMarginalNode` | 1D and 2D coordinate marginals plus JSD / total variation |
+| `EnergyHistNode` | histogram of the target energies and its JSD |
 
 ## `run_trajectory_demo` - evaluating the dynamics
 
@@ -56,8 +57,34 @@ meaningless.
 | --- | --- |
 | `VampNode` | VAMP-2 score of both ensembles and their gap |
 | `ImpliedTimescaleNode` | slowest relaxation timescales in ps, their relative error, and a parity plot against the reference |
-| `TicaHistEval` | the sampled distribution in TICA coordinates (TICA fitted on the reference) |
-| `CoordinateMarginalEval` | plain coordinate marginals of the pooled frames |
+| `TicaHistNode` | the sampled distribution in TICA coordinates (TICA fitted on the reference) |
+| `CoordinateMarginalNode` | plain coordinate marginals of the pooled frames |
 
 The static nodes consume the very same data as a plain sample batch, which
 `TrajectoryEnsemble.as_samples()` pools for them.
+
+## `run_single_demo` - describing one dataset on its own
+
+Sometimes there is nothing to compare against. The `...NodeSingle` variants
+require only the `*_true` fields, draw no "true"/"pred" titles or legends, and
+omit every metric that needs two datasets. Their default output is the plot;
+the raw data behind it is opt-in.
+
+This demo runs **all seven** of them. One set of Langevin trajectories is the
+single dataset, looked at from every angle:
+
+| node | what it reports |
+| --- | --- |
+| `SamplePlot2DNodeSingle` | scatter of the frames over the target log density |
+| `CoordinateMarginalNodeSingle` | 1D and 2D coordinate marginals (`include_histograms=True`) |
+| `EnergyHistNodeSingle` | histogram of the target energies (`include_histogram=True`) |
+| `TicaHistNodeSingle` | the distribution in TICA coordinates (`include_projections=True`) |
+| `VampNodeSingle` | VAMP-2 score of the trajectories |
+| `ImpliedTimescaleNodeSingle` | timescale spectrum, labelled with its values |
+
+The seventh, `TorsionMarginalNodeSingle`, reads backbone angles off a molecule,
+which the two-dimensional toy system does not have. It is therefore shown on
+alanine dipeptide (`test_files/aldp_topology.pdb`), with structures faked as
+noise around the reference conformation. That conformation is fully extended
+(phi = psi = pi), so the density appears at the edges of the Ramachandran plot
+rather than in its middle.

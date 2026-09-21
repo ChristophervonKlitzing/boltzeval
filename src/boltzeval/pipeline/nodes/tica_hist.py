@@ -6,6 +6,7 @@ from boltzeval.pipeline import EvaluationNode
 from boltzeval.utils.hist_visualization import (
     VisualizationMode,
     plot_as_free_energy,
+    visualize_histogram_2d,
     visualize_histogram_2d_dual,
 )
 
@@ -14,7 +15,11 @@ from boltzeval.utils.histogram import Histogram
 import numpy as np
 
 
-class TicaHistEval(EvaluationNode):
+class TicaHistNode(EvaluationNode):
+    """
+    Compares predicted against reference samples in TICA coordinates.
+    """
+
     requirements = ["samples_true", "samples_pred"]
 
     def __init__(
@@ -91,6 +96,88 @@ class TicaHistEval(EvaluationNode):
         return metrics
 
 
+class TicaHistNodeSingle(EvaluationNode):
+    """
+    Histogram of a single set of samples in TICA coordinates.
+
+    The single-dataset counterpart of :class:`TicaHistNode`: it projects the
+    reference samples with a pre-trained TICA model and visualizes them on
+    their own, so no histogram comparison metrics are produced.
+    """
+
+    requirements = ["samples_true"]
+
+    def __init__(
+        self,
+        tica: Transformer,
+        feature_transform: FeatureTransform,
+        include_pdf: bool = True,
+        include_histogram: bool = False,
+        include_projections: bool = False,
+        vis_mode: VisualizationMode = plot_as_free_energy,
+        bins=100,
+        data_range: tuple[float, float, float, float] | None = None,
+    ):
+        """
+        Parameters
+        ----------
+        tica : Transformer
+            Pre-trained TICA model the samples are projected with.
+        feature_transform : FeatureTransform
+            Transform applied to the samples before the projection.
+        include_pdf : bool
+            Whether to produce the visualization of the TICA histogram.
+        include_histogram : bool
+            Whether to also return the raw histogram.
+        include_projections : bool
+            Whether to also return the raw TICA projections of the samples,
+            of shape (n_samples, 2).
+        vis_mode : VisualizationMode
+            How the histogram is mapped to plotted values.
+        bins : int
+            Number of histogram bins per dimension.
+        data_range : tuple[float, float, float, float] | None
+            Explicit (x_min, x_max, y_min, y_max) histogram range. Determined
+            from the projections if None.
+        """
+        super().__init__()
+
+        self.include_pdf = include_pdf
+        self.include_histogram = include_histogram
+        self.include_projections = include_projections
+
+        self._tica = tica
+        self._feature_transform = feature_transform
+        self._vis_mode = vis_mode
+        self._bins = bins
+        self._data_range = data_range
+
+    def _eval(self, data):
+        metrics = {}
+
+        projections = project_tica(
+            data.samples_true, self._tica, self._feature_transform
+        )
+        assert projections.shape[1] == 2
+
+        hist = Histogram.from_samples(
+            projections, bins=self._bins, data_range=self._data_range
+        )
+
+        if self.include_projections:
+            metrics["tica/projections"] = projections
+
+        if self.include_histogram:
+            metrics["tica/hist"] = hist
+
+        if self.include_pdf:
+            metrics["tica/pdf"] = visualize_histogram_2d(
+                hist, vis_mode=self._vis_mode
+            )
+
+        return metrics
+
+
 # vvvvvvvv Small demo for testing vvvvvvvv
 if __name__ == "__main__":
     from boltzeval.metrics.tica import fit_tica
@@ -159,7 +246,7 @@ if __name__ == "__main__":
         dim=2,
     )
 
-    eval_node = TicaHistEval(
+    eval_node = TicaHistNode(
         tica_model, feature_transform, hist_metrics=[get_hist_jensen_shannon]
     )
 

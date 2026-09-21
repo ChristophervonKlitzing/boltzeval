@@ -9,7 +9,11 @@ from boltzeval.utils.pdf import matplotlib_to_pdf_buffer
 from boltzeval.utils.plot import plot_2d
 
 
-class SamplePlot2DEval(EvaluationNode):
+class SamplePlot2DNode(EvaluationNode):
+    """
+    Scatters predicted and reference samples over the target density.
+    """
+
     requirements = ["samples_true", "samples_pred"]
 
     def __init__(
@@ -101,6 +105,112 @@ class SamplePlot2DEval(EvaluationNode):
         ax.set_ylabel(self._ylabel)
 
         ax.legend()
+
+        pdf = matplotlib_to_pdf_buffer(ax)
+        plt.close()
+        return {self._key: pdf}
+
+
+class SamplePlot2DNodeSingle(EvaluationNode):
+    """
+    Scatters a single set of samples over the target density.
+
+    The single-dataset counterpart of :class:`SamplePlot2DNode`: only the
+    reference samples are drawn, so there is nothing to tell apart and no
+    legend is added.
+    """
+
+    requirements = ["samples_true"]
+
+    def __init__(
+        self,
+        xlim: tuple[float, float] | None = None,
+        ylim: tuple[float, float] | None = None,
+        target_log_prob_fn: Callable[[np.ndarray], np.ndarray] | None = None,
+        log_prob_range: tuple[float, float] | None = None,
+        key: str = "Media/sample_plot_2d",
+        n_max_scatter_samples: int = 200,
+        xlabel: str = "x",
+        ylabel: str = "y",
+        color: str = "crimson",
+        cmap: str = "viridis",
+    ):
+        """
+        Parameters
+        ----------
+        xlim, ylim : tuple[float, float] | None
+            Axis limits. Taken from the samples if None.
+        target_log_prob_fn : Callable[[np.ndarray], np.ndarray] | None
+            Target log density, drawn as a background contour plot if given.
+        log_prob_range : tuple[float, float] | None
+            Range the background log densities are clipped to.
+        key : str
+            Key of the produced metric.
+        n_max_scatter_samples : int
+            Maximum number of samples to scatter.
+        xlabel, ylabel : str
+            Axis labels.
+        color : str
+            Color of the scattered samples.
+        cmap : str
+            Colormap of the background contour plot.
+        """
+        super().__init__()
+
+        self._xlim = xlim
+        self._ylim = ylim
+        self._target_log_prob_fn = target_log_prob_fn
+        self._log_prob_range = log_prob_range
+        self._key = key
+        self._n_max_scatter_samples = n_max_scatter_samples
+
+        self._xlabel = xlabel
+        self._ylabel = ylabel
+
+        self._color = color
+        self._cmap = cmap
+
+    def _eval(self, data):
+        samples = data.samples_true
+
+        assert samples.ndim == 2
+        assert samples.shape[1] == 2
+
+        fig, ax = plt.subplots(figsize=(6, 5))
+
+        xlim = self._xlim
+        ylim = self._ylim
+
+        if xlim is None:
+            xlim = (samples[:, 0].min(), samples[:, 0].max())
+        if ylim is None:
+            ylim = (samples[:, 1].min(), samples[:, 1].max())
+
+        if self._target_log_prob_fn is not None:
+            plot_2d(
+                self._target_log_prob_fn,
+                xlim=xlim,
+                ylim=ylim,
+                log_prob_range=self._log_prob_range,
+                ax=ax,
+                cmap=self._cmap,
+            )
+
+        samples = samples[: self._n_max_scatter_samples]
+
+        ax.scatter(
+            samples[:, 0],
+            samples[:, 1],
+            s=4,
+            c=self._color,
+            alpha=0.5,
+            marker="x",
+        )
+
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+        ax.set_xlabel(self._xlabel)
+        ax.set_ylabel(self._ylabel)
 
         pdf = matplotlib_to_pdf_buffer(ax)
         plt.close()

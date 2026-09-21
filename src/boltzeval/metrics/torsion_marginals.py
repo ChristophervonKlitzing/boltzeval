@@ -150,6 +150,97 @@ def get_free_energy_difference(
     return free_energy_delta
 
 
+def visualize_torsion_marginals(
+    torsion_marginals: tuple[list[Histogram], list[Histogram], list[Histogram]],
+    vis_mode: VisualizationMode = plot_as_log_density,
+    show: bool = False,
+    cmap: str | None = None,
+    **kwargs,
+):
+    """
+    Visualize the torsion-angle histograms of a single set of samples.
+
+    Creates one row per torsion pair holding the marginal 1D phi and psi
+    histograms and the joint Ramachandran (phi/psi) 2D histogram, and returns
+    the resulting figure as a PDF buffer. Since only one set of samples is
+    shown, the panels carry no titles.
+
+    Parameters
+    ----------
+    torsion_marginals : tuple[list[Histogram], list[Histogram], list[Histogram]]
+        Histograms in order (phi_psi_2d, phi_1d, psi_1d).
+
+    vis_mode : VisualizationMode, default=plot_as_log_density
+        Visualization mode passed to histogram plotting functions.
+
+    show : bool, default=False
+        If True, displays the figure interactively.
+
+    cmap : str | None, optional
+        Colormap for 2D histogram visualization.
+
+    **kwargs
+        Additional keyword arguments forwarded to histogram visualization.
+
+    Returns
+    -------
+    PdfBuffer
+        PDF buffer of the generated Matplotlib figure.
+    """
+    assert len(torsion_marginals[0]) == len(torsion_marginals[1])
+    assert len(torsion_marginals[1]) == len(torsion_marginals[2])
+
+    n_pairs = len(torsion_marginals[0])
+
+    fig, axes = plt.subplots(n_pairs, 3, squeeze=False, figsize=(10, 3 * n_pairs))
+    for i in range(n_pairs):
+        ax_phi: plt.Axes = axes[i, 0]
+        ax_psi: plt.Axes = axes[i, 1]
+        ax_ram: plt.Axes = axes[i, 2]
+
+        h_ram = torsion_marginals[0][i]
+        h_phi = torsion_marginals[1][i]
+        h_psi = torsion_marginals[2][i]
+
+        phi_label = f"$\\phi_{i}$"
+        psi_label = f"$\\psi_{i}$"
+
+        visualize_histogram_1d(
+            h_phi,
+            vis_mode=vis_mode,
+            ax=ax_phi,
+            xlabel=phi_label,
+            **kwargs,
+        )
+
+        visualize_histogram_1d(
+            h_psi,
+            vis_mode=vis_mode,
+            ax=ax_psi,
+            xlabel=psi_label,
+            **kwargs,
+        )
+
+        visualize_histogram_2d(
+            h_ram,
+            vis_mode=vis_mode,
+            ax=ax_ram,
+            xlabel=phi_label,
+            ylabel=psi_label,
+            cmap=cmap,
+            **kwargs,
+        )
+
+    pdf = matplotlib_to_pdf_buffer(fig)
+
+    if show:
+        plt.show()
+    else:
+        plt.close()
+
+    return pdf
+
+
 def visualize_torsion_marginals_dual(
     torsion_marginals_true: tuple[list[Histogram], list[Histogram], list[Histogram]],
     torsion_marginals_pred: tuple[list[Histogram], list[Histogram], list[Histogram]],
