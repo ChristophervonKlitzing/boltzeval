@@ -41,11 +41,22 @@ Every node comes in two flavors:
 - `<Name>NodeSingle` looks at one dataset on its own and requires only the
   `*_true` fields.
 
+Each evaluation node also defines a `requirements` class attribute that lists the
+`EvalData` fields it needs to run. For example,
+`EnergyHistNode.requirements = ["true_samples_target_log_prob",
+"pred_samples_target_log_prob"]`, while a single-dataset node such as
+`EnergyHistNodeSingle` only requires `["true_samples_target_log_prob"]`. The
+pipeline checks these requirements before executing a node; if any required field
+is missing, the node is skipped unless strict mode is enabled.
+
 The single variants exist for visualizing a dataset rather than scoring a model
 against it: their plots carry no "true"/"pred" titles or legends, and metrics
 that need both datasets (histogram comparisons, score gaps, relative errors)
-are omitted. Their default output is the visualization; the underlying raw data
-is opt-in:
+are omitted. They are not limited to visualization, however: they can also
+return raw intermediate data such as histograms or projected coordinates when
+those outputs are enabled. The exact default values of the optional outputs can
+change over time, so when you care about the result explicitly pass the flags
+you want:
 
 ```python
 from boltzeval.pipeline.nodes import TicaHistNodeSingle
@@ -54,8 +65,8 @@ eval_pipeline.append(
     TicaHistNodeSingle(
         tica=tica_model,
         feature_transform=feature_transform,
-        include_histogram=True,    # off by default
-        include_projections=True,  # off by default
+        include_histogram=True,
+        include_projections=True,
     )
 )
 
