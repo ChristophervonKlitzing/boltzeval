@@ -51,9 +51,11 @@ class TorsionMarginalNode(EvaluationNode):
         include_pred_histograms: bool = True,
         include_free_energy_difference: bool = False,
         histogram_metrics: tuple[HistogramMetric] = [get_hist_jensen_shannon],
+        bins=100,
     ):
         super().__init__()
         self._topology = topology
+        self._bins = bins
         self.vis_mode = vis_mode
 
         self.include_pdf = include_pdf
@@ -79,8 +81,8 @@ class TorsionMarginalNode(EvaluationNode):
         angles_true = get_torsion_angles(samples_true, self._topology)
         angles_pred = get_torsion_angles(samples_pred, self._topology)
 
-        torsion_marginals_true = get_torsion_marginal_hists(*angles_true)
-        torsion_marginals_pred = get_torsion_marginal_hists(*angles_pred)
+        torsion_marginals_true = get_torsion_marginal_hists(*angles_true, bins=self._bins)
+        torsion_marginals_pred = get_torsion_marginal_hists(*angles_pred, bins=self._bins)
 
         if self.include_free_energy_difference:
             # Compute free energy difference on phi angles
@@ -150,6 +152,7 @@ class TorsionMarginalNodeSingle(EvaluationNode):
         include_pdf: bool = True,
         include_histograms: bool = True,
         include_free_energy_difference: bool = False,
+        bins=100,
     ):
         """
         Parameters
@@ -165,9 +168,12 @@ class TorsionMarginalNodeSingle(EvaluationNode):
         include_free_energy_difference : bool
             Whether to also report the free energy difference between the two
             phi regions, which is a single-dataset quantity.
+        bins : int
+            Number of histogram bins per angle.
         """
         super().__init__()
         self._topology = topology
+        self._bins = bins
         self.vis_mode = vis_mode
 
         self.include_pdf = include_pdf
@@ -180,7 +186,7 @@ class TorsionMarginalNodeSingle(EvaluationNode):
         samples = reshape_to_molecular(data.samples_true)
 
         angles = get_torsion_angles(samples, self._topology)
-        torsion_marginals = get_torsion_marginal_hists(*angles)
+        torsion_marginals = get_torsion_marginal_hists(*angles, bins=self._bins)
 
         if self.include_free_energy_difference:
             # Computed on the phi angles
